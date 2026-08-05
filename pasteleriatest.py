@@ -1,7 +1,8 @@
 import streamlit as st
 from utils import get_supabase_client
 from modules.insumos import show_modulo_insumos
-from modules.proveedores import show_modulo_proveedores # 👈 Importamos el nuevo módulo
+from modules.proveedores import show_modulo_proveedores
+from modules.recetas import show_modulo_recetas
 
 st.set_page_config(page_title="Pastelería ERP", page_icon="🧁", layout="wide")
 
@@ -33,8 +34,7 @@ elif opcion_menu == "🚚 Proveedores y Compras": # 👈 Ruteo aquí
     show_modulo_proveedores()
 
 elif opcion_menu == "🧾 Recetario / Escandallos":
-    st.header("🧾 Recetario y Escandallos")
-    st.info("Módulo en construcción. Próximamente podrás asociar insumos a recetas y calcular el costo exacto de cada preparación.")
+    show_modulo_recetas()
 
 elif opcion_menu == "🎂 Catálogo de Productos":
     st.header("🎂 Catálogo de Productos")
