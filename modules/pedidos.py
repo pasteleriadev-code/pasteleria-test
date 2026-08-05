@@ -8,7 +8,7 @@ supabase = get_supabase_client()
 def show_modulo_pedidos():
     st.header("🚀 Venta Rápida - POS & Encargos")
 
-    # Botones superiores de acción general
+    # Botón superior de limpieza
     col_top1, col_top2 = st.columns([8, 2])
     with col_top2:
         if st.button("🧹 Limpiar Todo", use_container_width=True):
@@ -20,11 +20,22 @@ def show_modulo_pedidos():
     # ---------------------------------------------------------
     with st.expander("📂 VER PEDIDOS / ENCARGOS PENDIENTES", expanded=False):
         try:
-            res_p = supabase.table("pedidos").select("*, clientes(nombre)").neq("estado", "Finalizado").order("fecha_entrega").execute()
-            if res_p.data:
-                df_pend = pd.DataFrame(res_p.data)
-                df_pend["cliente"] = df_pend["clientes"].apply(lambda x: x["nombre"] if x else "N/A")
+            # Consulta de pedidos pendientes y clientes por separado para evitar fallos de JOIN
+            res_p = supabase.table("pedidos").select("*").neq("estado", "Finalizado").order("fecha_entrega").execute()
+            res_c_all = supabase.table("clientes").select("id, nombre").execute()
+            
+            pedidos_list = res_p.data or []
+            dict_map_clientes = {c["id"]: c["nombre"] for c in (res_c_all.data or [])}
+
+            if pedidos_list:
+                df_pend = pd.DataFrame(pedidos_list)
+                df_pend["cliente"] = df_pend["cliente_id"].map(dict_map_clientes).fillna("N/A")
                 
+                # Asegurar columnas opcionales si vienen nulas
+                for col in ["forma_entrega", "monto_sena", "notas_personalizacion"]:
+                    if col not in df_pend.columns:
+                        df_pend[col] = "-"
+
                 st.dataframe(
                     df_pend[["fecha_entrega", "cliente", "forma_entrega", "monto_total", "monto_sena", "estado", "notas_personalizacion"]],
                     column_config={
@@ -53,10 +64,10 @@ def show_modulo_pedidos():
         res_c = supabase.table("clientes").select("*").order("nombre").execute()
         clientes = res_c.data or []
     except Exception as e:
-        st.error(f"Error al cargar clientes: {e}")
+        st.error(f"Error al cargar lista de clientes: {e}")
         clientes = []
 
-    dict_clientes = {f"{c['nombre']} ({c.get('telefono','') or 'S/T'})": c for c in clientes}
+    dict_clientes = {f"{c['nombre']} ({c.get('telefono','') or 'Sin Tel.'})": c for c in clientes}
 
     c_cli, c_btn_cli, c_vend = st.columns([6, 1, 3])
     
@@ -67,10 +78,10 @@ def show_modulo_pedidos():
         )
         cliente_actual = dict_clientes[cli_sel] if cli_sel else None
     else:
-        c_cli.warning("No hay clientes registrados.")
+        c_cli.warning("No hay clientes registrados en el sistema.")
         cliente_actual = None
 
-    # Modal desplegable para alta rápida de clientes
+    # Modal para dar de alta clientes rápidamente
     with c_btn_cli:
         st.write("") 
         if st.button("➕", help="Crear Nuevo Cliente"):
@@ -95,10 +106,10 @@ def show_modulo_pedidos():
                         "direccion": n_dir
                     }).execute()
                     st.session_state.mostrar_form_cliente_pos = False
-                    st.success("Cliente guardado.")
+                    st.success("Cliente guardado exitosamente.")
                     st.rerun()
                 else:
-                    st.error("El nombre es obligatorio.")
+                    st.error("El nombre del cliente es obligatorio.")
 
     vendedor = c_vend.selectbox("👔 Vendedor", ["Martin Yazlle", "Caja Mostrador", "Atención WhatsApp"])
 
@@ -158,11 +169,9 @@ def show_modulo_pedidos():
             
             c_nom.markdown(f"**{item['nombre']}**")
             
-            # Cambiar cantidad
             nueva_cant = c_cant.number_input("Cant.", min_value=1, value=int(item["cantidad"]), key=f"cant_{idx}")
             item["cantidad"] = nueva_cant
 
-            # Modificar precio en vivo si hay descuento o recargo
             nuevo_precio = c_prec.number_input("Precio", min_value=0.0, value=float(item["precio"]), step=50.0, format="%.2f", key=f"prec_{idx}")
             item["precio"] = nuevo_precio
 
@@ -223,7 +232,6 @@ def show_modulo_pedidos():
             st.error("Por favor selecciona un cliente antes de guardar.")
         else:
             try:
-                # 1. Insertar Cabecera en 'pedidos'
                 payload_p = {
                     "cliente_id": cliente_actual["id"],
                     "vendedor": vendedor,
@@ -239,12 +247,11 @@ def show_modulo_pedidos():
                 res_p = supabase.table("pedidos").insert(payload_p).execute()
                 pedido_id = res_p.data[0]["id"]
 
-                # 2. Insertar Detalle en 'pedido_detalles'
                 for item in st.session_state.carrito_pos:
                     supabase.table("pedido_detalles").insert({
                         "pedido_id": pedido_id,
                         "producto_id": item["id"],
-                        "cantidad": item["cantidad"],
+                        "cantidad": int(item["cantidad"]),
                         "precio_unitario": item["precio"],
                         "subtotal": item["cantidad"] * item["precio"]
                     }).execute()
@@ -256,7 +263,7 @@ def show_modulo_pedidos():
                 st.error(f"Error al registrar venta: {e}")
 
     # B) Guardar como Pendiente / Encargo
-    if c_btn_pend.button("⏳ GUARDAR COMO PENDIENTE / ENCARGO", use_container_width=True, disabled=len(st.session_state.carrito_pos) == 0):
+    if c_btn_pend.button("⏳ GUARDAR COMO PENDIENTES / ENCARGO", use_container_width=True, disabled=len(st.session_state.carrito_pos) == 0):
         if not cliente_actual:
             st.error("Por favor selecciona un cliente antes de guardar.")
         else:
@@ -280,7 +287,7 @@ def show_modulo_pedidos():
                     supabase.table("pedido_detalles").insert({
                         "pedido_id": pedido_id,
                         "producto_id": item["id"],
-                        "cantidad": item["cantidad"],
+                        "cantidad": int(item["cantidad"]),
                         "precio_unitario": item["precio"],
                         "subtotal": item["cantidad"] * item["precio"]
                     }).execute()
