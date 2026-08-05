@@ -17,7 +17,8 @@ st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3081/3081920.png", widt
 st.sidebar.title("ERP Pastelería")
 st.sidebar.markdown("---")
 
-opcion_menu = st.sidebar.radio(
+# ⬇️ Cambiamos 'st.sidebar.radio' por 'st.sidebar.selectbox'
+opcion_menu = st.sidebar.selectbox(
     "Selecciona un Módulo:",
     [
         "📦 Insumos / Inventario",
