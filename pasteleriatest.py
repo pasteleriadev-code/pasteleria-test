@@ -1,27 +1,21 @@
 import streamlit as st
 from utils import get_supabase_client
 from modules.insumos import show_modulo_insumos
+from modules.proveedores import show_modulo_proveedores # 👈 Importamos el nuevo módulo
 
-# Configuración de página
-st.set_page_config(
-    page_title="Pastelería ERP",
-    page_icon="🧁",
-    layout="wide"
-)
+st.set_page_config(page_title="Pastelería ERP", page_icon="🧁", layout="wide")
 
-# Validar conexión
 supabase = get_supabase_client()
 
-# Barra Lateral - Navegación
-st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3081/3081920.png", width=100) # Icono de pastelería
+st.sidebar.image("https://cdn-icons-png.flaticon.com/512/3081/3081920.png", width=100)
 st.sidebar.title("ERP Pastelería")
 st.sidebar.markdown("---")
 
-# ⬇️ Cambiamos 'st.sidebar.radio' por 'st.sidebar.selectbox'
 opcion_menu = st.sidebar.selectbox(
     "Selecciona un Módulo:",
     [
         "📦 Insumos / Inventario",
+        "🚚 Proveedores y Compras", # 👈 Agregado aquí
         "🧾 Recetario / Escandallos",
         "🎂 Catálogo de Productos",
         "📅 Pedidos y Encargos",
@@ -32,9 +26,11 @@ opcion_menu = st.sidebar.selectbox(
 st.sidebar.markdown("---")
 st.sidebar.caption("Sistema ERP v1.0 | Conectado a Supabase")
 
-# Enrutamiento de pantallas
 if opcion_menu == "📦 Insumos / Inventario":
     show_modulo_insumos()
+
+elif opcion_menu == "🚚 Proveedores y Compras": # 👈 Ruteo aquí
+    show_modulo_proveedores()
 
 elif opcion_menu == "🧾 Recetario / Escandallos":
     st.header("🧾 Recetario y Escandallos")
