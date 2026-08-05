@@ -13,96 +13,123 @@ def show_modulo_pedidos():
     with col_top2:
         if st.button("🧹 Limpiar Todo", use_container_width=True):
             st.session_state.carrito_pos = []
-            st.session_state.cliente_pos = None
             st.rerun()
 
-    # Pestaña desplegable de pendientes
-    with st.expander("📂 VER VENTAS / PEDIDOS PENDIENTES", expanded=False):
+    # ---------------------------------------------------------
+    # 0. PESTAÑA DESPLEGABLE: ENCARGOS PENDIENTES
+    # ---------------------------------------------------------
+    with st.expander("📂 VER PEDIDOS / ENCARGOS PENDIENTES", expanded=False):
         try:
-            res_p = supabase.table("ventas").select("*, clientes(nombre_completo)").eq("estado", "Pendiente").order("fecha_entrega").execute()
+            res_p = supabase.table("pedidos").select("*, clientes(nombre)").neq("estado", "Finalizado").order("fecha_entrega").execute()
             if res_p.data:
                 df_pend = pd.DataFrame(res_p.data)
-                df_pend["cliente"] = df_pend["clientes"].apply(lambda x: x["nombre_completo"] if x else "N/A")
+                df_pend["cliente"] = df_pend["clientes"].apply(lambda x: x["nombre"] if x else "N/A")
                 
                 st.dataframe(
-                    df_pend[["fecha_entrega", "cliente", "forma_entrega", "monto_total", "monto_pagado", "observaciones"]],
+                    df_pend[["fecha_entrega", "cliente", "forma_entrega", "monto_total", "monto_sena", "estado", "notas_personalizacion"]],
                     column_config={
                         "fecha_entrega": "Entrega",
                         "cliente": "Cliente",
                         "forma_entrega": "Modo",
-                        "monto_total": st.column_config.NumberColumn("Total", format="$%.2f"),
-                        "monto_pagado": st.column_config.NumberColumn("Seña/Pagado", format="$%.2f"),
-                        "observaciones": "Notas"
+                        "monto_total": st.column_config.NumberColumn("Total ($)", format="$%.2f"),
+                        "monto_sena": st.column_config.NumberColumn("Seña ($)", format="$%.2f"),
+                        "estado": "Estado",
+                        "notas_personalizacion": "Notas / Dedicatoria"
                     },
                     use_container_width=True,
                     hide_index=True
                 )
             else:
-                st.info("No hay pedidos pendientes.")
+                st.info("No hay encargos pendientes de entrega.")
         except Exception as e:
-            st.error(f"Error al cargar pendientes: {e}")
+            st.error(f"Error al cargar pedidos pendientes: {e}")
 
     st.markdown("---")
 
     # ---------------------------------------------------------
-    # 1. ENCABEZADO: CLIENTE Y VENDEDOR (Exacto a tu 1ra imagen)
+    # 1. ENCABEZADO: SELECCIÓN O CREACIÓN DE CLIENTE
     # ---------------------------------------------------------
-    res_c = supabase.table("clientes").select("*").order("nombre_completo").execute()
-    clientes = res_c.data or []
-    dict_clientes = {f"{c['nombre_completo']} ({c.get('telefono','')})": c for c in clientes}
+    try:
+        res_c = supabase.table("clientes").select("*").order("nombre").execute()
+        clientes = res_c.data or []
+    except Exception as e:
+        st.error(f"Error al cargar clientes: {e}")
+        clientes = []
+
+    dict_clientes = {f"{c['nombre']} ({c.get('telefono','') or 'S/T'})": c for c in clientes}
 
     c_cli, c_btn_cli, c_vend = st.columns([6, 1, 3])
     
-    cli_sel = c_cli.selectbox(
-        "🪪 Buscar Cliente (Nombre, Apellido, Teléfono o Razón Social)",
-        options=list(dict_clientes.keys())
-    )
-    cliente_actual = dict_clientes[cli_sel] if cli_sel else None
+    if dict_clientes:
+        cli_sel = c_cli.selectbox(
+            "🪪 Buscar Cliente (Nombre, Apellido o Teléfono)",
+            options=list(dict_clientes.keys())
+        )
+        cliente_actual = dict_clientes[cli_sel] if cli_sel else None
+    else:
+        c_cli.warning("No hay clientes registrados.")
+        cliente_actual = None
 
-    # Modal rápido para agregar cliente si no existe
+    # Modal desplegable para alta rápida de clientes
     with c_btn_cli:
-        st.write("") # Espaciador vertical
-        if st.button("➕", help="Agregar Nuevo Cliente"):
-            st.session_state.mostrar_form_cliente = True
+        st.write("") 
+        if st.button("➕", help="Crear Nuevo Cliente"):
+            st.session_state.mostrar_form_cliente_pos = not st.session_state.get("mostrar_form_cliente_pos", False)
 
-    if st.session_state.get("mostrar_form_cliente", False):
-        with st.form("form_quick_cliente"):
-            st.subheader("Nuevo Cliente Rápidamente")
-            n_nombre = st.text_input("Nombre Completo *")
-            n_tel = st.text_input("Teléfono")
-            n_dir = st.text_input("Dirección")
-            if st.form_submit_button("Guardar"):
+    if st.session_state.get("mostrar_form_cliente_pos", False):
+        with st.form("form_quick_cliente_pos"):
+            st.subheader("➕ Nuevo Cliente Rápido")
+            col_fa, col_fb = st.columns(2)
+            n_nombre = col_fa.text_input("Nombre Completo *")
+            n_tel = col_fb.text_input("Teléfono")
+            col_fc, col_fd = st.columns(2)
+            n_email = col_fc.text_input("Email")
+            n_dir = col_fd.text_input("Dirección")
+            
+            if st.form_submit_button("Guardar Cliente"):
                 if n_nombre.strip():
-                    supabase.table("clientes").insert({"nombre_completo": n_nombre, "telefono": n_tel, "direccion": n_dir}).execute()
-                    st.session_state.mostrar_form_cliente = False
+                    supabase.table("clientes").insert({
+                        "nombre": n_nombre.strip(), 
+                        "telefono": n_tel, 
+                        "email": n_email, 
+                        "direccion": n_dir
+                    }).execute()
+                    st.session_state.mostrar_form_cliente_pos = False
                     st.success("Cliente guardado.")
                     st.rerun()
+                else:
+                    st.error("El nombre es obligatorio.")
 
     vendedor = c_vend.selectbox("👔 Vendedor", ["Martin Yazlle", "Caja Mostrador", "Atención WhatsApp"])
 
     st.markdown("---")
 
     # ---------------------------------------------------------
-    # 2. AÑADIR PRODUCTOS AL CARRITO (Exacto a tu 1ra imagen)
+    # 2. AÑADIR PRODUCTOS DEL CATÁLOGO AL CARRITO
     # ---------------------------------------------------------
     st.subheader("🔍 Añadir Productos")
     
-    res_prod = supabase.table("productos").select("*").eq("activo", True).order("nombre").execute()
-    productos = res_prod.data or []
-    dict_productos = {f"{p['nombre']} - ${p['precio_venta']:,.2f}": p for p in productos}
+    try:
+        res_prod = supabase.table("productos").select("*").eq("activo", True).order("nombre").execute()
+        productos = res_prod.data or []
+    except Exception as e:
+        productos = []
+        st.error(f"Error al cargar catálogo de productos: {e}")
+
+    dict_productos = {f"{p['nombre']} - ${float(p['precio_venta']):,.2f}": p for p in productos}
 
     if "carrito_pos" not in st.session_state:
         st.session_state.carrito_pos = []
 
     prod_sel_key = st.selectbox(
-        "Buscar por nombre",
+        "Buscar por nombre en el catálogo",
         options=["Escriba para buscar producto..."] + list(dict_productos.keys())
     )
 
     if prod_sel_key != "Escriba para buscar producto...":
         prod_obj = dict_productos[prod_sel_key]
         
-        # Verificar si ya está en el carrito
+        # Verificar si ya existe en el carrito
         existe = next((item for item in st.session_state.carrito_pos if item["id"] == prod_obj["id"]), None)
         if existe:
             existe["cantidad"] += 1
@@ -116,7 +143,7 @@ def show_modulo_pedidos():
         st.rerun()
 
     # ---------------------------------------------------------
-    # 3. DETALLE DE LA VENTA (Exacto a tu 2da imagen)
+    # 3. DETALLE DE LA VENTA / TABLA INTERACTIVA
     # ---------------------------------------------------------
     st.subheader("🛒 Detalle de la Venta")
 
@@ -131,11 +158,11 @@ def show_modulo_pedidos():
             
             c_nom.markdown(f"**{item['nombre']}**")
             
-            # Control de Cantidad (+ / -)
+            # Cambiar cantidad
             nueva_cant = c_cant.number_input("Cant.", min_value=1, value=int(item["cantidad"]), key=f"cant_{idx}")
             item["cantidad"] = nueva_cant
 
-            # Control de Precio (Permite cambiarlo en vivo si hay descuento)
+            # Modificar precio en vivo si hay descuento o recargo
             nuevo_precio = c_prec.number_input("Precio", min_value=0.0, value=float(item["precio"]), step=50.0, format="%.2f", key=f"prec_{idx}")
             item["precio"] = nuevo_precio
 
@@ -151,105 +178,115 @@ def show_modulo_pedidos():
         st.markdown("---")
 
     # ---------------------------------------------------------
-    # 4. TOTAL A COBRAR & 5. FORMAS DE PAGO (Exacto a tu 2da imagen)
+    # 4. TOTAL A COBRAR & 5. FORMAS DE PAGO / SEÑA
     # ---------------------------------------------------------
     st.markdown(f"## 💰 Total a Cobrar: **${total_a_cobrar:,.2f}**")
 
     st.subheader("💳 Formas de Pago")
     
-    col_fp1, col_fp2 = st.columns([4, 4])
-    metodo_pago = col_fp1.selectbox("Método 1", ["Efectivo", "Transferencia / MP", "Tarjeta de Débito", "Tarjeta de Crédito", "Cuenta Corriente"])
+    col_fp1, col_fp2 = st.columns(2)
+    metodo_pago = col_fp1.selectbox("Método de Pago", ["Efectivo", "Transferencia / MercadoPago", "Tarjeta de Débito", "Tarjeta de Crédito", "Cuenta Corriente"])
     monto_abonado = col_fp2.number_input("Monto Abonado / Seña ($)", min_value=0.0, value=float(total_a_cobrar), step=100.0, format="%.2f")
 
     diferencia = total_a_cobrar - monto_abonado
     if diferencia > 0:
-        st.warning(f"⚠️ Faltan completar / Pendiente de cobro: **${diferencia:,.2f}**")
+        st.warning(f"⚠️ Faltan completar / Restan abonar: **${diferencia:,.2f}**")
     elif diferencia < 0:
         st.info(f"💡 Vuelto a entregar: **${abs(diferencia):,.2f}**")
 
     st.markdown("---")
 
     # ---------------------------------------------------------
-    # 6. FORMA DE ENTREGA (Exacto a tu 2da imagen)
+    # 6. FORMA DE ENTREGA & NOTAS
     # ---------------------------------------------------------
     st.subheader("🚚 Forma de Entrega")
 
-    c_ent1, c_ent2 = st.columns([4, 4])
+    c_ent1, c_ent2 = st.columns(2)
     forma_entrega = c_ent1.radio("¿Cómo se entrega?", ["Mostrador", "Reparto / Envíos"], horizontal=False)
     fecha_entrega = c_ent2.date_input("Fecha de entrega", value=datetime.today())
 
     observaciones = st.text_input(
-        "📝 Observaciones / Notas para el Repartidor o Pastelero",
-        placeholder="Ej: Pasar antes de las 16hs, dedicatoria 'Feliz Cumple Lucas', cobro exacto..."
+        "📝 Observaciones / Notas de Personalización",
+        placeholder="Ej: Relleno de dulce de leche con nuez, dedicatoria 'Feliz Cumple', horario especial..."
     )
 
     st.markdown("---")
 
     # ---------------------------------------------------------
-    # 7. BOTONES DE ACCIÓN (FINALIZAR vs GUARDAR PENDIENTES)
+    # 7. BOTONES DE GUARDADO (FINALIZAR VS PENDIENTE)
     # ---------------------------------------------------------
     c_btn_fin, c_btn_pend = st.columns(2)
 
-    # Botón Principal: Finalizar Venta
+    # A) Finalizar y Registrar Venta Directa
     if c_btn_fin.button("🏁 FINALIZAR Y REGISTRAR VENTA", type="primary", use_container_width=True, disabled=len(st.session_state.carrito_pos) == 0):
-        try:
-            # 1. Registrar venta como Finalizada
-            payload_v = {
-                "cliente_id": cliente_actual["id"],
-                "vendedor": vendedor,
-                "monto_total": total_a_cobrar,
-                "monto_pagado": monto_abonado,
-                "metodo_pago": metodo_pago,
-                "forma_entrega": forma_entrega,
-                "fecha_entrega": str(fecha_entrega),
-                "observaciones": observaciones,
-                "estado": "Finalizada"
-            }
-            res_v = supabase.table("ventas").insert(payload_v).execute()
-            venta_id = res_v.data[0]["id"]
+        if not cliente_actual:
+            st.error("Por favor selecciona un cliente antes de guardar.")
+        else:
+            try:
+                # 1. Insertar Cabecera en 'pedidos'
+                payload_p = {
+                    "cliente_id": cliente_actual["id"],
+                    "vendedor": vendedor,
+                    "monto_total": total_a_cobrar,
+                    "monto_sena": monto_abonado,
+                    "metodo_pago": metodo_pago,
+                    "forma_entrega": forma_entrega,
+                    "fecha_pedido": datetime.now().isoformat(),
+                    "fecha_entrega": str(fecha_entrega),
+                    "notas_personalizacion": observaciones,
+                    "estado": "Finalizado"
+                }
+                res_p = supabase.table("pedidos").insert(payload_p).execute()
+                pedido_id = res_p.data[0]["id"]
 
-            # 2. Insertar Detalle
-            for item in st.session_state.carrito_pos:
-                supabase.table("venta_detalles").insert({
-                    "venta_id": venta_id,
-                    "producto_id": item["id"],
-                    "cantidad": item["cantidad"],
-                    "precio_unitario": item["precio"]
-                }).execute()
+                # 2. Insertar Detalle en 'pedido_detalles'
+                for item in st.session_state.carrito_pos:
+                    supabase.table("pedido_detalles").insert({
+                        "pedido_id": pedido_id,
+                        "producto_id": item["id"],
+                        "cantidad": item["cantidad"],
+                        "precio_unitario": item["precio"],
+                        "subtotal": item["cantidad"] * item["precio"]
+                    }).execute()
 
-            st.success("🎉 ¡Venta registrada exitosamente!")
-            st.session_state.carrito_pos = []
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error al registrar la venta: {e}")
+                st.success("🎉 ¡Venta finalizada y registrada correctamente!")
+                st.session_state.carrito_pos = []
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al registrar venta: {e}")
 
-    # Botón Secundario: Guardar como Pendiente (Encargo)
-    if c_btn_pend.button("⏳ GUARDAR COMO PENDIENTES / ENCARGO", use_container_width=True, disabled=len(st.session_state.carrito_pos) == 0):
-        try:
-            payload_v = {
-                "cliente_id": cliente_actual["id"],
-                "vendedor": vendedor,
-                "monto_total": total_a_cobrar,
-                "monto_pagado": monto_abonado,
-                "metodo_pago": metodo_pago,
-                "forma_entrega": forma_entrega,
-                "fecha_entrega": str(fecha_entrega),
-                "observaciones": observaciones,
-                "estado": "Pendiente"
-            }
-            res_v = supabase.table("ventas").insert(payload_v).execute()
-            venta_id = res_v.data[0]["id"]
+    # B) Guardar como Pendiente / Encargo
+    if c_btn_pend.button("⏳ GUARDAR COMO PENDIENTE / ENCARGO", use_container_width=True, disabled=len(st.session_state.carrito_pos) == 0):
+        if not cliente_actual:
+            st.error("Por favor selecciona un cliente antes de guardar.")
+        else:
+            try:
+                payload_p = {
+                    "cliente_id": cliente_actual["id"],
+                    "vendedor": vendedor,
+                    "monto_total": total_a_cobrar,
+                    "monto_sena": monto_abonado,
+                    "metodo_pago": metodo_pago,
+                    "forma_entrega": forma_entrega,
+                    "fecha_pedido": datetime.now().isoformat(),
+                    "fecha_entrega": str(fecha_entrega),
+                    "notas_personalizacion": observaciones,
+                    "estado": "Pendiente"
+                }
+                res_p = supabase.table("pedidos").insert(payload_p).execute()
+                pedido_id = res_p.data[0]["id"]
 
-            for item in st.session_state.carrito_pos:
-                supabase.table("venta_detalles").insert({
-                    "venta_id": venta_id,
-                    "producto_id": item["id"],
-                    "cantidad": item["cantidad"],
-                    "precio_unitario": item["precio"]
-                }).execute()
+                for item in st.session_state.carrito_pos:
+                    supabase.table("pedido_detalles").insert({
+                        "pedido_id": pedido_id,
+                        "producto_id": item["id"],
+                        "cantidad": item["cantidad"],
+                        "precio_unitario": item["precio"],
+                        "subtotal": item["cantidad"] * item["precio"]
+                    }).execute()
 
-            st.success("🎉 ¡Pedido guardado como PENDIENTE! Aparecerá en el panel de encargos.")
-            st.session_state.carrito_pos = []
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error al guardar encargo: {e}")
+                st.success("🎉 ¡Encargo guardado como PENDIENTE! Puedes verlo en la lista superior.")
+                st.session_state.carrito_pos = []
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error al registrar encargo: {e}")
