@@ -4,6 +4,7 @@ from modules.insumos import show_modulo_insumos
 from modules.proveedores import show_modulo_proveedores
 from modules.recetas import show_modulo_recetas
 from modules.productos import show_modulo_productos
+from modules.pedidos import show_modulo_pedidos
 
 st.set_page_config(page_title="Pastelería ERP", page_icon="🧁", layout="wide")
 
@@ -41,8 +42,7 @@ elif opcion_menu == "🎂 Catálogo de Productos":
     show_modulo_productos()
 
 elif opcion_menu == "📅 Pedidos y Encargos":
-    st.header("📅 Pedidos y Encargos")
-    st.info("Módulo en construcción. Calendario para coordinar entregas y anticipos de clientes.")
+    show_modulo_pedidos()
 
 elif opcion_menu == "📊 Dashboard / Reportes":
     st.header("📊 Dashboard Financiero y de Mermas")
