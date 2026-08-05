@@ -3,6 +3,7 @@ from utils import get_supabase_client
 from modules.insumos import show_modulo_insumos
 from modules.proveedores import show_modulo_proveedores
 from modules.recetas import show_modulo_recetas
+from modules.productos import show_modulo_productos
 
 st.set_page_config(page_title="Pastelería ERP", page_icon="🧁", layout="wide")
 
@@ -37,8 +38,7 @@ elif opcion_menu == "🧾 Recetario / Escandallos":
     show_modulo_recetas()
 
 elif opcion_menu == "🎂 Catálogo de Productos":
-    st.header("🎂 Catálogo de Productos")
-    st.info("Módulo en construcción. Aquí definirás los precios de venta de tus tortas y postres.")
+    show_modulo_productos()
 
 elif opcion_menu == "📅 Pedidos y Encargos":
     st.header("📅 Pedidos y Encargos")
