@@ -20,7 +20,7 @@ def show_modulo_pedidos():
     # ---------------------------------------------------------
     with st.expander("📂 VER PEDIDOS / ENCARGOS PENDIENTES", expanded=False):
         try:
-            # Consulta de pedidos pendientes (excluyendo 'Entregado' y opcionalmente 'Cancelado')
+            # Consulta de pedidos pendientes (excluyendo 'Entregado')
             res_p = supabase.table("pedidos").select("*").neq("estado", "Entregado").order("fecha_entrega").execute()
             res_c_all = supabase.table("clientes").select("id, nombre").execute()
             
@@ -132,14 +132,12 @@ def show_modulo_pedidos():
     if "carrito_pos" not in st.session_state:
         st.session_state.carrito_pos = []
 
-    # Función callback para procesar la selección y resetear la clave antes del re-render
     def agregar_producto_al_carrito():
         prod_sel_key = st.session_state.get("selector_producto_pos")
         if prod_sel_key and prod_sel_key != "Escriba para buscar producto...":
             if prod_sel_key in dict_productos:
                 prod_obj = dict_productos[prod_sel_key]
                 
-                # Verificar si ya existe en el carrito
                 existe = next((item for item in st.session_state.carrito_pos if item["id"] == prod_obj["id"]), None)
                 if existe:
                     existe["cantidad"] += 1
@@ -150,10 +148,8 @@ def show_modulo_pedidos():
                         "precio": float(prod_obj["precio_venta"]),
                         "cantidad": 1
                     })
-            # Limpiar la selección en el callback
             st.session_state["selector_producto_pos"] = "Escriba para buscar producto..."
 
-    # Selectbox con callback on_change
     st.selectbox(
         "Buscar por nombre en el catálogo",
         options=["Escriba para buscar producto..."] + list(dict_productos.keys()),
@@ -240,6 +236,7 @@ def show_modulo_pedidos():
             st.error("Por favor selecciona un cliente antes de guardar.")
         else:
             try:
+                # 1. Crear el registro en la tabla pedidos
                 payload_p = {
                     "cliente_id": cliente_actual["id"],
                     "vendedor": vendedor,
@@ -257,20 +254,25 @@ def show_modulo_pedidos():
 
                 detalles_payload = []
                 for item in st.session_state.carrito_pos:
+                    subtotal_prod = float(item["cantidad"] * item["precio"])
+                    
+                    # Estructura del detalle
                     detalles_payload.append({
                         "pedido_id": pedido_id,
                         "producto_id": item["id"],
                         "cantidad": int(item["cantidad"]),
-                        "precio_unitario": item["precio"]
+                        "precio_unitario": item["precio"],
+                        "subtotal": subtotal_prod
                     })
                     
-                    # --- DESCONTAR STOCK DEL PRODUCTO ---
-                    res_prod_curr = supabase.table("productos").select("stock").eq("id", item["id"]).execute()
+                    # 2. DESCONTAR STOCK USANDO 'stock_actual'
+                    res_prod_curr = supabase.table("productos").select("stock_actual").eq("id", item["id"]).execute()
                     if res_prod_curr.data:
-                        stock_actual = res_prod_curr.data[0].get("stock", 0) or 0
-                        nuevo_stock = max(0, stock_actual - int(item["cantidad"]))
-                        supabase.table("productos").update({"stock": nuevo_stock}).eq("id", item["id"]).execute()
+                        stock_previo = res_prod_curr.data[0].get("stock_actual", 0) or 0
+                        nuevo_stock = max(0, stock_previo - int(item["cantidad"]))
+                        supabase.table("productos").update({"stock_actual": nuevo_stock}).eq("id", item["id"]).execute()
 
+                # 3. Guardar detalles
                 supabase.table("pedido_detalles").insert(detalles_payload).execute()
 
                 st.success("🎉 ¡Venta finalizada, registrada y stock actualizado correctamente!")
@@ -305,7 +307,8 @@ def show_modulo_pedidos():
                         "pedido_id": pedido_id,
                         "producto_id": item["id"],
                         "cantidad": int(item["cantidad"]),
-                        "precio_unitario": item["precio"]
+                        "precio_unitario": item["precio"],
+                        "subtotal": float(item["cantidad"] * item["precio"])
                     }
                     for item in st.session_state.carrito_pos
                 ]
