@@ -150,7 +150,7 @@ def show_modulo_pedidos():
                         "precio": float(prod_obj["precio_venta"]),
                         "cantidad": 1
                     })
-            # Limpiar la selección en el callback (aquí SÍ está permitido)
+            # Limpiar la selección en el callback
             st.session_state["selector_producto_pos"] = "Escriba para buscar producto..."
 
     # Selectbox con callback on_change
@@ -255,15 +255,25 @@ def show_modulo_pedidos():
                 res_p = supabase.table("pedidos").insert(payload_p).execute()
                 pedido_id = res_p.data[0]["id"]
 
+                detalles_payload = []
                 for item in st.session_state.carrito_pos:
-                    supabase.table("pedido_detalles").insert({
+                    detalles_payload.append({
                         "pedido_id": pedido_id,
                         "producto_id": item["id"],
                         "cantidad": int(item["cantidad"]),
                         "precio_unitario": item["precio"]
-                    }).execute()
+                    })
+                    
+                    # --- DESCONTAR STOCK DEL PRODUCTO ---
+                    res_prod_curr = supabase.table("productos").select("stock").eq("id", item["id"]).execute()
+                    if res_prod_curr.data:
+                        stock_actual = res_prod_curr.data[0].get("stock", 0) or 0
+                        nuevo_stock = max(0, stock_actual - int(item["cantidad"]))
+                        supabase.table("productos").update({"stock": nuevo_stock}).eq("id", item["id"]).execute()
 
-                st.success("🎉 ¡Venta finalizada y registrada correctamente!")
+                supabase.table("pedido_detalles").insert(detalles_payload).execute()
+
+                st.success("🎉 ¡Venta finalizada, registrada y stock actualizado correctamente!")
                 st.session_state.carrito_pos = []
                 st.rerun()
             except Exception as e:
@@ -290,14 +300,18 @@ def show_modulo_pedidos():
                 res_p = supabase.table("pedidos").insert(payload_p).execute()
                 pedido_id = res_p.data[0]["id"]
 
-                for item in st.session_state.carrito_pos:
-                    supabase.table("pedido_detalles").insert({
+                detalles_payload = [
+                    {
                         "pedido_id": pedido_id,
                         "producto_id": item["id"],
                         "cantidad": int(item["cantidad"]),
                         "precio_unitario": item["precio"]
-                    }).execute()
-    
+                    }
+                    for item in st.session_state.carrito_pos
+                ]
+                
+                supabase.table("pedido_detalles").insert(detalles_payload).execute()
+
                 st.success("🎉 ¡Encargo guardado como PENDIENTE! Puedes verlo en la lista superior.")
                 st.session_state.carrito_pos = []
                 st.rerun()
