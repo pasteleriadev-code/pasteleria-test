@@ -1,8 +1,27 @@
+import math
 import streamlit as st
 import pandas as pd
 from utils import get_supabase_client
 
 supabase = get_supabase_client()
+
+
+# ---------------------------------------------------------
+# FUNCIÓN AUXILIAR DE CÁLCULO DE PRECIO
+# ---------------------------------------------------------
+def calcular_precio_sugerido(costo_receta: float) -> float:
+    """
+    Calcula el precio de venta sugerido aplicando:
+    1. Margen del 100% sobre el costo (Costo * 2).
+    2. Redondeo hacia arriba al siguiente múltiplo de 100.
+    """
+    if costo_receta <= 0:
+        return 0.0
+
+    precio_base = costo_receta * 2.0
+    precio_redondeado = math.ceil(precio_base / 100.0) * 100
+    return float(precio_redondeado)
+
 
 def show_modulo_recetas():
     st.header("🧾 Recetario y Producción")
@@ -19,7 +38,12 @@ def show_modulo_recetas():
     with tab_catalogo:
         st.subheader("Recetas Guardadas")
         try:
-            res_recetas = supabase.table("recetas").select("*, receta_detalles(*, insumos(*))").order("nombre").execute()
+            res_recetas = (
+                supabase.table("recetas")
+                .select("*, receta_detalles(*, insumos(*))")
+                .order("nombre")
+                .execute()
+            )
             recetas = res_recetas.data
 
             if recetas:
@@ -45,10 +69,16 @@ def show_modulo_recetas():
                     rendimiento = r["rendimiento_porciones"] or 1
                     costo_porcion = costo_total / rendimiento if rendimiento > 0 else 0.0
 
-                    with st.expander(f"🎂 {r['nombre']} — Costo Total: ${costo_total:,.2f} | Rendimiento: {rendimiento} un/porciones"):
-                        col_m1, col_m2 = st.columns(2)
+                    with st.expander(
+                        f"🎂 {r['nombre']} — Costo Total: ${costo_total:,.2f} | Rendimiento: {rendimiento} un/porciones"
+                    ):
+                        col_m1, col_m2, col_m3 = st.columns(3)
                         col_m1.metric("Costo Lote Completo", f"${costo_total:,.2f}")
                         col_m2.metric("Costo por Unid/Porción", f"${costo_porcion:,.2f}")
+                        
+                        # Calculamos el precio sugerido para el lote
+                        precio_sug = calcular_precio_sugerido(costo_total)
+                        col_m3.metric("Precio Venta Sugerido (Lote)", f"${precio_sug:,.2f}")
 
                         if detalles_list:
                             st.dataframe(
@@ -62,7 +92,6 @@ def show_modulo_recetas():
                             )
 
                         if st.button(f"🗑️ Eliminar Receta '{r['nombre']}'", key=f"del_{r['id']}"):
-                            # Al eliminar la receta se elimina el vínculo
                             supabase.table("recetas").delete().eq("id", r["id"]).execute()
                             st.success("Receta eliminada.")
                             st.rerun()
@@ -72,7 +101,7 @@ def show_modulo_recetas():
             st.error(f"Error al cargar recetas: {e}")
 
     # ---------------------------------------------------------
-    # 2. CREAR NUEVA RECETA (+ AUTO CREAR PRODUCTO)
+    # 2. CREAR NUEVA RECETA (+ AUTO CREAR PRODUCTO CON PRECIO)
     # ---------------------------------------------------------
     with tab_nueva:
         st.subheader("➕ Diseñar Receta")
@@ -101,7 +130,9 @@ def show_modulo_recetas():
         ins_sel_nombre = col_i1.selectbox("Seleccionar Insumo", list(dict_ins.keys()))
         ins_obj = dict_ins[ins_sel_nombre]
 
-        cant_ingrediente = col_i2.number_input(f"Cantidad ({ins_obj['unidad_medida']})", min_value=0.01, step=1.0, format="%.2f")
+        cant_ingrediente = col_i2.number_input(
+            f"Cantidad ({ins_obj['unidad_medida']})", min_value=0.01, step=1.0, format="%.2f"
+        )
         
         if col_i3.button("➕ Añadir Insumo", use_container_width=True):
             costo_u = float(ins_obj["costo_unidad"] or 0)
@@ -127,8 +158,26 @@ def show_modulo_recetas():
                 hide_index=True
             )
 
-            total_receta = df_borr["subtotal"].sum()
-            st.metric("Costo Estimado de Materia Prima por Lote", f"${total_receta:,.2f}")
+            # CÁLCULOS DE COSTO Y PRECIO SUGERIDO
+            total_receta = float(df_borr["subtotal"].sum())
+            precio_sugerido_calculado = calcular_precio_sugerido(total_receta)
+
+            st.markdown("---")
+            st.markdown("#### 💰 Configuración del Precio de Venta")
+
+            col_met1, col_met2, col_met3 = st.columns(3)
+            col_met1.metric("Costo Materia Prima", f"${total_receta:,.2f}")
+            col_met2.metric("Precio Sugerido (100% M.P + Redondeo)", f"${precio_sugerido_calculado:,.2f}")
+
+            # Permite al usuario revisar/ajustar manualmente el precio inicial
+            precio_venta_final = col_met3.number_input(
+                "Precio Venta Inicial ($)",
+                min_value=0.0,
+                value=precio_sugerido_calculado,
+                step=100.0,
+                format="%.2f",
+                help="Se autocalcula con un 100% de margen redondeado al siguiente múltiplo de 100. Puedes cambiarlo libremente."
+            )
 
             cb1, cb2 = st.columns(2)
             if cb1.button("❌ Vaciar Borrador", use_container_width=True):
@@ -158,17 +207,17 @@ def show_modulo_recetas():
                                 "cantidad": item["cantidad"]
                             }).execute()
 
-                        # C) AUTO-CREAR PRODUCTO EN CATÁLOGO CON EL MISMO NOMBRE
+                        # C) AUTO-CREAR PRODUCTO EN CATÁLOGO CON PRECIO CALCULADO/AJUSTADO
                         supabase.table("productos").insert({
                             "nombre": r_nombre.strip(),
                             "receta_id": receta_id,
                             "categoria": "Tortas",
-                            "precio_venta": 0.0,  # Se inicializa en 0 para definir precio en el catálogo
-                            "stock_actual": 0.0,  # Comienza en cero hasta que se cocine una tanda
+                            "precio_venta": precio_venta_final,  # 👈 Guardamos el precio calculado/modificado
+                            "stock_actual": 0.0,
                             "activo": True
                         }).execute()
 
-                        st.success(f"🎉 ¡Receta e ítem de Catálogo **'{r_nombre}'** creados exitosamente!")
+                        st.success(f"🎉 ¡Receta y Producto **'{r_nombre}'** creados con precio inicial de **${precio_venta_final:,.2f}**!")
                         st.session_state.borrador_ingredientes = []
                         st.rerun()
                     except Exception as e:
@@ -182,7 +231,12 @@ def show_modulo_recetas():
         st.caption("Al confirmar, se restan las materias primas y se agregan las porciones al producto terminado.")
 
         try:
-            res_rec = supabase.table("recetas").select("*, receta_detalles(*, insumos(*))").order("nombre").execute()
+            res_rec = (
+                supabase.table("recetas")
+                .select("*, receta_detalles(*, insumos(*))")
+                .order("nombre")
+                .execute()
+            )
             recetas_prod = res_rec.data or []
 
             if recetas_prod:
@@ -235,7 +289,7 @@ def show_modulo_recetas():
                         nuevo_stock_insumo = item["stock_actual"] - item["requerido"]
                         supabase.table("insumos").update({"stock_actual": nuevo_stock_insumo}).eq("id", item["insumo_id"]).execute()
 
-                    # B) Sumar Stock al Producto Terminado correspondiente (misma receta_id o mismo nombre)
+                    # B) Sumar Stock al Producto Terminado correspondiente
                     res_p = supabase.table("productos").select("*").eq("receta_id", receta_obj["id"]).execute()
                     prods_asociados = res_p.data or []
 
@@ -247,12 +301,15 @@ def show_modulo_recetas():
                         supabase.table("productos").update({"stock_actual": nuevo_stock_prod}).eq("id", prod_target["id"]).execute()
                         st.success(f"🎉 ¡Producción registrada! Se restó la materia prima y se SUMARON **+{porciones_totales} unidades** al producto **'{prod_target['nombre']}'** en el Catálogo.")
                     else:
-                        # Si por alguna razón no existía el producto vinculado, lo crea de inmediato con el stock
+                        # Fallback en caso de que el producto no existiera aún
+                        costo_lote = sum(float(d["cantidad"]) * float(d.get("insumos", {}).get("costo_unidad") or 0) for d in detalles)
+                        precio_sug_fallback = calcular_precio_sugerido(costo_lote)
+
                         supabase.table("productos").insert({
                             "nombre": receta_obj["nombre"],
                             "receta_id": receta_obj["id"],
                             "categoria": "Tortas",
-                            "precio_venta": 0.0,
+                            "precio_venta": precio_sug_fallback,
                             "stock_actual": porciones_totales,
                             "activo": True
                         }).execute()
