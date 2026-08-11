@@ -62,6 +62,7 @@ def show_modulo_recetas():
                             )
 
                         if st.button(f"🗑️ Eliminar Receta '{r['nombre']}'", key=f"del_{r['id']}"):
+                            # Al eliminar la receta se elimina el vínculo
                             supabase.table("recetas").delete().eq("id", r["id"]).execute()
                             st.success("Receta eliminada.")
                             st.rerun()
@@ -71,7 +72,7 @@ def show_modulo_recetas():
             st.error(f"Error al cargar recetas: {e}")
 
     # ---------------------------------------------------------
-    # 2. CREAR NUEVA RECETA
+    # 2. CREAR NUEVA RECETA (+ AUTO CREAR PRODUCTO)
     # ---------------------------------------------------------
     with tab_nueva:
         st.subheader("➕ Diseñar Receta")
@@ -89,8 +90,8 @@ def show_modulo_recetas():
             st.session_state.borrador_ingredientes = []
 
         c1, c2, c3 = st.columns([3, 1, 1])
-        r_nombre = c1.text_input("Nombre de la Receta *", placeholder="Ej. Torta Pasta Frola")
-        r_rendimiento = c2.number_input("Porciones / Rendimiento", min_value=1, value=1)
+        r_nombre = c1.text_input("Nombre de la Receta / Producto *", placeholder="Ej. Torta Pasta Frola")
+        r_rendimiento = c2.number_input("Porciones / Rendimiento por Lote", min_value=1, value=1)
         r_tiempo = c3.number_input("Tiempo (Mins)", min_value=0, value=45)
         r_desc = st.text_area("Descripción / Preparación", placeholder="Notas del chef...")
 
@@ -102,7 +103,7 @@ def show_modulo_recetas():
 
         cant_ingrediente = col_i2.number_input(f"Cantidad ({ins_obj['unidad_medida']})", min_value=0.01, step=1.0, format="%.2f")
         
-        if col_i3.button("➕ Añadir", use_container_width=True):
+        if col_i3.button("➕ Añadir Insumo", use_container_width=True):
             costo_u = float(ins_obj["costo_unidad"] or 0)
             st.session_state.borrador_ingredientes.append({
                 "insumo_id": ins_obj["id"],
@@ -127,19 +128,19 @@ def show_modulo_recetas():
             )
 
             total_receta = df_borr["subtotal"].sum()
-            st.metric("Costo Estimado de Materia Prima", f"${total_receta:,.2f}")
+            st.metric("Costo Estimado de Materia Prima por Lote", f"${total_receta:,.2f}")
 
             cb1, cb2 = st.columns(2)
             if cb1.button("❌ Vaciar Borrador", use_container_width=True):
                 st.session_state.borrador_ingredientes = []
                 st.rerun()
 
-            if cb2.button("💾 Guardar Receta", type="primary", use_container_width=True):
+            if cb2.button("💾 Guardar Receta y Alta en Catálogo", type="primary", use_container_width=True):
                 if not r_nombre.strip():
                     st.error("Ingresa el nombre de la receta.")
                 else:
                     try:
-                        # Insertar receta
+                        # A) Guardar Receta
                         rec_res = supabase.table("recetas").insert({
                             "nombre": r_nombre.strip(),
                             "descripcion": r_desc.strip(),
@@ -149,7 +150,7 @@ def show_modulo_recetas():
 
                         receta_id = rec_res.data[0]["id"]
 
-                        # Insertar detalles
+                        # B) Guardar Ingredientes
                         for item in st.session_state.borrador_ingredientes:
                             supabase.table("receta_detalles").insert({
                                 "receta_id": receta_id,
@@ -157,18 +158,28 @@ def show_modulo_recetas():
                                 "cantidad": item["cantidad"]
                             }).execute()
 
-                        st.success(f"¡Receta '{r_nombre}' creada con éxito!")
+                        # C) AUTO-CREAR PRODUCTO EN CATÁLOGO CON EL MISMO NOMBRE
+                        supabase.table("productos").insert({
+                            "nombre": r_nombre.strip(),
+                            "receta_id": receta_id,
+                            "categoria": "Tortas",
+                            "precio_venta": 0.0,  # Se inicializa en 0 para definir precio en el catálogo
+                            "stock_actual": 0.0,  # Comienza en cero hasta que se cocine una tanda
+                            "activo": True
+                        }).execute()
+
+                        st.success(f"🎉 ¡Receta e ítem de Catálogo **'{r_nombre}'** creados exitosamente!")
                         st.session_state.borrador_ingredientes = []
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error al guardar: {e}")
 
     # ---------------------------------------------------------
-    # 3. REGISTRAR PRODUCCIÓN
+    # 3. REGISTRAR PRODUCCIÓN (AUTO SUMAR STOCK DE PRODUCTO)
     # ---------------------------------------------------------
     with tab_producir:
         st.subheader("👨‍🍳 Cocinar / Producir Lotes")
-        st.caption("Descuenta la materia prima del Inventario y suma el Producto Terminado a la venta.")
+        st.caption("Al confirmar, se restan las materias primas y se agregan las porciones al producto terminado.")
 
         try:
             res_rec = supabase.table("recetas").select("*, receta_detalles(*, insumos(*))").order("nombre").execute()
@@ -180,12 +191,12 @@ def show_modulo_recetas():
                 receta_obj = dict_r_prod[r_seleccionada]
 
                 cp1, cp2 = st.columns(2)
-                lotes = cp1.number_input("Cantidad de Tandas / Lotes", min_value=1, value=1)
+                lotes = cp1.number_input("Cantidad de Tandas / Lotes a Cocinar", min_value=1, value=1)
                 porciones_totales = lotes * (receta_obj["rendimiento_porciones"] or 1)
-                cp2.metric("Unidades/Porciones a Producir", porciones_totales)
+                cp2.metric("Unidades/Porciones Producidas", porciones_totales)
 
-                # Comprobar Stock
-                st.markdown("##### 🔍 Chequeo de Stock Requerido")
+                # Comprobar Stock de Materia Prima
+                st.markdown("##### 🔍 Verificación de Materia Prima")
                 detalles = receta_obj.get("receta_detalles", [])
                 
                 suficiente = True
@@ -216,15 +227,15 @@ def show_modulo_recetas():
                 )
 
                 if not suficiente:
-                    st.error("⚠️ No hay suficiente materia prima para producir esta cantidad de lotes.")
+                    st.error("⚠️ No hay suficiente materia prima para producir estas tandas.")
 
                 if st.button("🍳 Confirmar Producción", type="primary", disabled=not suficiente, use_container_width=True):
-                    # A) Descontar Insumos
+                    # A) Descontar Insumos (Materia Prima)
                     for item in items_produccion:
                         nuevo_stock_insumo = item["stock_actual"] - item["requerido"]
                         supabase.table("insumos").update({"stock_actual": nuevo_stock_insumo}).eq("id", item["insumo_id"]).execute()
 
-                    # B) Sumar al Producto Terminado en Productos
+                    # B) Sumar Stock al Producto Terminado correspondiente (misma receta_id o mismo nombre)
                     res_p = supabase.table("productos").select("*").eq("receta_id", receta_obj["id"]).execute()
                     prods_asociados = res_p.data or []
 
@@ -234,9 +245,18 @@ def show_modulo_recetas():
                         nuevo_stock_prod = stock_prod_actual + porciones_totales
                         
                         supabase.table("productos").update({"stock_actual": nuevo_stock_prod}).eq("id", prod_target["id"]).execute()
-                        st.success(f"🎉 ¡Producción exitosa! Se restaron los insumos y se agregaron **+{porciones_totales} unidades** al stock de '{prod_target['nombre']}'.")
+                        st.success(f"🎉 ¡Producción registrada! Se restó la materia prima y se SUMARON **+{porciones_totales} unidades** al producto **'{prod_target['nombre']}'** en el Catálogo.")
                     else:
-                        st.warning(f"⚠️ Se descontaron los insumos correctamente, pero la receta **'{receta_obj['nombre']}'** no está vinculada a ningún producto del Catálogo todavía.")
+                        # Si por alguna razón no existía el producto vinculado, lo crea de inmediato con el stock
+                        supabase.table("productos").insert({
+                            "nombre": receta_obj["nombre"],
+                            "receta_id": receta_obj["id"],
+                            "categoria": "Tortas",
+                            "precio_venta": 0.0,
+                            "stock_actual": porciones_totales,
+                            "activo": True
+                        }).execute()
+                        st.success(f"🎉 ¡Producción registrada! Se creó el producto **'{receta_obj['nombre']}'** con **{porciones_totales} unidades** en stock.")
 
                     st.rerun()
             else:
