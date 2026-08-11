@@ -262,7 +262,7 @@ def show_modulo_pedidos():
                     # 2. DESCONTAR STOCK VÍA RPC
                     supabase.rpc(
                         "descontar_stock", 
-                        {"pid": item["id"], "cant": int(item["cantidad"])}
+                        {"pid": int(item["id"]), "cant": int(item["cantidad"])}
                     ).execute()
 
                 # 3. Guardar detalles sin la columna 'subtotal'
