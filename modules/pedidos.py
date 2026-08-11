@@ -256,7 +256,7 @@ def show_modulo_pedidos():
                 for item in st.session_state.carrito_pos:
                     subtotal_prod = float(item["cantidad"] * item["precio"])
                     
-                    # Estructura del detalle
+                    # Estructura del detalle para 'pedido_detalles'
                     detalles_payload.append({
                         "pedido_id": pedido_id,
                         "producto_id": item["id"],
@@ -265,12 +265,11 @@ def show_modulo_pedidos():
                         "subtotal": subtotal_prod
                     })
                     
-                    # 2. DESCONTAR STOCK USANDO 'stock_actual'
-                    res_prod_curr = supabase.table("productos").select("stock_actual").eq("id", item["id"]).execute()
-                    if res_prod_curr.data:
-                        stock_previo = res_prod_curr.data[0].get("stock_actual", 0) or 0
-                        nuevo_stock = max(0, stock_previo - int(item["cantidad"]))
-                        supabase.table("productos").update({"stock_actual": nuevo_stock}).eq("id", item["id"]).execute()
+                    # 2. DESCONTAR STOCK VÍA RPC (Súper seguro y directo)
+                    supabase.rpc(
+                        "descontar_stock", 
+                        {"pid": item["id"], "cant": int(item["cantidad"])}
+                    ).execute()
 
                 # 3. Guardar detalles
                 supabase.table("pedido_detalles").insert(detalles_payload).execute()
