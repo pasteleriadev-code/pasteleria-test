@@ -132,9 +132,11 @@ def show_modulo_pedidos():
     if "carrito_pos" not in st.session_state:
         st.session_state.carrito_pos = []
 
+    # Asignamos una 'key' fija al selectbox
     prod_sel_key = st.selectbox(
         "Buscar por nombre en el catálogo",
-        options=["Escriba para buscar producto..."] + list(dict_productos.keys())
+        options=["Escriba para buscar producto..."] + list(dict_productos.keys()),
+        key="selector_producto_pos"
     )
 
     if prod_sel_key != "Escriba para buscar producto...":
@@ -151,6 +153,9 @@ def show_modulo_pedidos():
                 "precio": float(prod_obj["precio_venta"]),
                 "cantidad": 1
             })
+            
+        # RESETEAR EL SELECTBOX para romper el bucle infinito:
+        st.session_state["selector_producto_pos"] = "Escriba para buscar producto..."
         st.rerun()
 
     # ---------------------------------------------------------
