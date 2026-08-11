@@ -260,8 +260,7 @@ def show_modulo_pedidos():
                         "pedido_id": pedido_id,
                         "producto_id": item["id"],
                         "cantidad": int(item["cantidad"]),
-                        "precio_unitario": item["precio"],
-                        "subtotal": item["cantidad"] * item["precio"]
+                        "precio_unitario": item["precio"]
                     }).execute()
 
                 st.success("🎉 ¡Venta finalizada y registrada correctamente!")
@@ -296,10 +295,9 @@ def show_modulo_pedidos():
                         "pedido_id": pedido_id,
                         "producto_id": item["id"],
                         "cantidad": int(item["cantidad"]),
-                        "precio_unitario": item["precio"],
-                        "subtotal": item["cantidad"] * item["precio"]
+                        "precio_unitario": item["precio"]
                     }).execute()
-
+    
                 st.success("🎉 ¡Encargo guardado como PENDIENTE! Puedes verlo en la lista superior.")
                 st.session_state.carrito_pos = []
                 st.rerun()
