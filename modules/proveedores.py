@@ -5,10 +5,48 @@ from utils import get_supabase_client
 
 supabase = get_supabase_client()
 
+def normalizar_unidad(u: str) -> str:
+    """Normaliza el texto de las unidades de medida para comparaciones."""
+    if not u:
+        return ""
+    u_clean = u.lower().strip()
+    if u_clean in ["kg", "kilo", "kilogramo", "kilogramos", "kgs"]:
+        return "kg"
+    if u_clean in ["g", "gramo", "gramos", "gr", "grs"]:
+        return "g"
+    if u_clean in ["l", "lt", "litro", "litros", "lts"]:
+        return "l"
+    if u_clean in ["ml", "mililitro", "mililitros", "cc"]:
+        return "ml"
+    if u_clean in ["unid", "unidad", "unidades", "u"]:
+        return "u"
+    return u_clean
+
+def obtener_factor_conversion_defecto(u_compra: str, u_base: str) -> float:
+    """Retorna el factor multiplicador por defecto para pasar de unidad de compra a unidad base."""
+    compra_norm = normalizar_unidad(u_compra)
+    base_norm = normalizar_unidad(u_base)
+
+    if compra_norm == base_norm:
+        return 1.0
+
+    # Conversiones de Peso
+    if compra_norm == "kg" and base_norm == "g":
+        return 1000.0
+    if compra_norm == "g" and base_norm == "kg":
+        return 0.001
+
+    # Conversiones de Volumen
+    if compra_norm == "l" and base_norm == "ml":
+        return 1000.0
+    if compra_norm == "ml" and base_norm == "l":
+        return 0.001
+
+    return 1.0
+
 def show_modulo_proveedores():
     st.header("🚚 Gestión de Proveedores y Compras")
 
-    # Pestañas principales calcadas a tus capturas
     tab_explorador, tab_nuevo, tab_modificar, tab_compras = st.tabs([
         "🔍 Explorador", 
         "➕ Nuevo Proveedor", 
@@ -17,7 +55,7 @@ def show_modulo_proveedores():
     ])
 
     # ---------------------------------------------------------
-    # 1. VER PROVEEDORES
+    # 1. EXPLORADOR DE PROVEEDORES
     # ---------------------------------------------------------
     with tab_explorador:
         st.subheader("Proveedores Registrados")
@@ -25,8 +63,11 @@ def show_modulo_proveedores():
             res = supabase.table("proveedores").select("*").order("razon_social").execute()
             if res.data:
                 df = pd.DataFrame(res.data)
+                cols_deseadas = ["razon_social", "cuit", "telefono", "condicion_fiscal", "direccion", "rubros"]
+                cols_existentes = [c for c in cols_deseadas if c in df.columns]
+                
                 st.dataframe(
-                    df[["razon_social", "cuit", "telefono", "condicion_fiscal", "direccion", "rubros"]],
+                    df[cols_existentes],
                     column_config={
                         "razon_social": "Razón Social",
                         "cuit": "CUIT",
@@ -44,10 +85,9 @@ def show_modulo_proveedores():
             st.error(f"Error al cargar proveedores: {e}")
 
     # ---------------------------------------------------------
-    # 2. DAR DE ALTA PROVEEDORES (Campos exactos de tu imagen)
+    # 2. ALTA DE PROVEEDORES
     # ---------------------------------------------------------
     with tab_nuevo:
-        # Sugerencia estética de ID como en tu imagen
         st.info("💡 Completá los datos del nuevo proveedor")
         
         with st.form("form_nuevo_proveedor", clear_on_submit=True):
@@ -87,7 +127,7 @@ def show_modulo_proveedores():
                         st.error(f"Error al guardar proveedor: {e}")
 
     # ---------------------------------------------------------
-    # 3. MODIFICAR DATOS DE PROVEEDORES
+    # 3. MODIFICAR PROVEEDORES
     # ---------------------------------------------------------
     with tab_modificar:
         st.subheader("Editar Proveedor Existente")
@@ -103,14 +143,15 @@ def show_modulo_proveedores():
 
                 with st.form("form_edit_proveedor"):
                     col1, col2 = st.columns(2)
-                    edit_razon = col1.text_input("Razón Social", value=datos_actuales["razon_social"])
+                    edit_razon = col1.text_input("Razón Social", value=datos_actuales.get("razon_social", ""))
                     edit_tel = col2.text_input("Teléfono", value=datos_actuales.get("telefono", ""))
 
                     col3, col4 = st.columns(2)
                     edit_cuit = col3.text_input("CUIT", value=datos_actuales.get("cuit", ""))
                     
                     opciones_cf = ["Responsable Inscripto", "Monotributo", "Exento", "Consumidor Final"]
-                    idx_cf = opciones_cf.index(datos_actuales.get("condicion_fiscal", "Responsable Inscripto"))
+                    cf_actual = datos_actuales.get("condicion_fiscal", "Responsable Inscripto")
+                    idx_cf = opciones_cf.index(cf_actual) if cf_actual in opciones_cf else 0
                     edit_cf = col4.selectbox("Condición Fiscal", opciones_cf, index=idx_cf)
 
                     edit_dir = st.text_input("Dirección", value=datos_actuales.get("direccion", ""))
@@ -118,12 +159,12 @@ def show_modulo_proveedores():
 
                     if st.form_submit_button("Actualizar Cambios", use_container_width=True):
                         update_data = {
-                            "razon_social": edit_razon,
-                            "cuit": edit_cuit,
-                            "telefono": edit_tel,
+                            "razon_social": edit_razon.strip(),
+                            "cuit": edit_cuit.strip(),
+                            "telefono": edit_tel.strip(),
                             "condicion_fiscal": edit_cf,
-                            "direccion": edit_dir,
-                            "rubros": edit_rubros
+                            "direccion": edit_dir.strip(),
+                            "rubros": edit_rubros.strip()
                         }
                         supabase.table("proveedores").update(update_data).eq("id", datos_actuales["id"]).execute()
                         st.success("¡Datos actualizados correctamente!")
@@ -131,10 +172,10 @@ def show_modulo_proveedores():
             else:
                 st.info("No hay proveedores disponibles para editar.")
         except Exception as e:
-            st.error(f"Error: {e}")
+            st.error(f"Error al modificar proveedor: {e}")
 
     # ---------------------------------------------------------
-    # 4. CARGAR FACTURA DE COMPRA E HISTORIAL (Basado en 2da captura)
+    # 4. CARGAR COMPRAS E HISTORIAL CON EQUIVALENCIAS
     # ---------------------------------------------------------
     with tab_compras:
         with st.expander("📁 Ver / Ocultar Historial de Compras", expanded=False):
@@ -142,20 +183,31 @@ def show_modulo_proveedores():
                 historial = supabase.table("compras").select("*, proveedores(razon_social)").order("fecha_factura", ascending=False).execute()
                 if historial.data:
                     df_h = pd.DataFrame(historial.data)
-                    df_h["proveedor"] = df_h["proveedores"].apply(lambda x: x["razon_social"] if x else "N/A")
+                    df_h["proveedor"] = df_h["proveedores"].apply(lambda x: x["razon_social"] if isinstance(x, dict) and "razon_social" in x else "N/A")
+                    
+                    cols_historial = ["fecha_factura", "proveedor", "punto_venta", "numero_factura", "metodo_pago", "monto_total"]
+                    cols_h_existentes = [c for c in cols_historial if c in df_h.columns]
+
                     st.dataframe(
-                        df_h[["fecha_factura", "proveedor", "punto_venta", "numero_factura", "metodo_pago", "monto_total"]],
+                        df_h[cols_h_existentes],
+                        column_config={
+                            "fecha_factura": "Fecha",
+                            "proveedor": "Proveedor",
+                            "punto_venta": "Punto Venta",
+                            "numero_factura": "N° Factura",
+                            "metodo_pago": "Método Pago",
+                            "monto_total": st.column_config.NumberColumn("Monto Total", format="$%.2f")
+                        },
                         use_container_width=True,
                         hide_index=True
                     )
                 else:
                     st.info("No hay compras registradas aún.")
             except Exception as e:
-                st.error(f"Error al cargar historial: {e}")
+                st.error(f"Error al cargar historial de compras: {e}")
 
         st.subheader("📄 Datos de la Factura Actual")
 
-        # Obtener proveedores para el selectbox
         res_p = supabase.table("proveedores").select("id, razon_social").execute()
         provs = res_p.data
 
@@ -165,7 +217,6 @@ def show_modulo_proveedores():
 
         dict_provs_compra = {p["razon_social"]: p["id"] for p in provs}
 
-        # Formulario de cabecera de la factura (Diseño exacto a la captura)
         c1, c2, c3, c4 = st.columns([3, 1.5, 2, 2])
         prov_nombre = c1.selectbox("Proveedor", list(dict_provs_compra.keys()))
         pv = c2.text_input("Punto Venta", value="00001", max_chars=5)
@@ -175,9 +226,8 @@ def show_modulo_proveedores():
         fecha_fac = st.date_input("Fecha de Factura", value=datetime.today())
 
         st.markdown("---")
-        st.subheader("🔍 Añadir Insumos a la Compra")
+        st.subheader("🔍 Añadir Insumo a la Compra (con Conversión de Unidades)")
 
-        # Obtener insumos
         res_ins = supabase.table("insumos").select("*").order("nombre").execute()
         insumos = res_ins.data
 
@@ -187,34 +237,97 @@ def show_modulo_proveedores():
 
         dict_insumos = {i["nombre"]: i for i in insumos}
 
-        # Inicializar carrito de compras en la sesión de Streamlit
         if "carrito_compra" not in st.session_state:
             st.session_state.carrito_compra = []
 
-        col_ins, col_cant, col_precio, col_btn = st.columns([4, 2, 2, 2])
-        ins_sel_nombre = col_ins.selectbox("Escriba para buscar producto/insumo...", list(dict_insumos.keys()))
+        # Seleccionar el Insumo
+        ins_sel_nombre = st.selectbox("Escriba para buscar producto/insumo...", list(dict_insumos.keys()))
         ins_objeto = dict_insumos[ins_sel_nombre]
+        unidad_base = ins_objeto.get("unidad_medida", "unidades")
 
-        cant_comprada = col_cant.number_input(f"Cantidad ({ins_objeto['unidad_medida']})", min_value=0.01, step=1.0)
-        precio_unitario = col_precio.number_input("Precio Unitario ($)", min_value=0.0, step=10.0, format="%.2f")
+        st.caption(f"📏 **Unidad base en sistema para {ins_objeto['nombre']}:** `{unidad_base}`")
 
-        if col_btn.button("➕ Agregar Item", use_container_width=True):
-            subtotal = cant_comprada * precio_unitario
-            st.session_state.carrito_compra.append({
-                "insumo_id": ins_objeto["id"],
-                "nombre": ins_objeto["nombre"],
-                "cantidad": cant_comprada,
-                "unidad": ins_objeto["unidad_medida"],
-                "precio_unitario": precio_unitario,
-                "subtotal": subtotal
-            })
-            st.rerun()
+        # Configuración de la compra (Unidad de factura vs Unidad base)
+        col_f1, col_f2, col_f3, col_f4 = st.columns([2, 2, 2, 2])
+        
+        cant_factura = col_f1.number_input("Cantidad en Factura", min_value=0.01, value=1.00, step=0.5)
+        
+        opciones_unidades = list(set([unidad_base, "kg", "g", "l", "ml", "unidades", "paquete/caja/bolsa"]))
+        idx_default_u = opciones_unidades.index("kg") if "kg" in opciones_unidades and normalizar_unidad(unidad_base) == "g" else 0
+        
+        unidad_factura = col_f2.selectbox("Unidad en Factura", opciones_unidades, index=idx_default_u)
+        
+        tipo_precio = col_f3.selectbox("Modalidad de Precio", ["Precio Total del Item ($)", "Precio Unitario Factura ($)"])
+        monto_ingresado = col_f4.number_input("Monto ($)", min_value=0.0, value=0.0, step=10.0, format="%.2f")
 
-        # Mostrar Tabla de Items en la Factura actual
+        # Conversión / Equivalencia
+        factor_sugerido = obtener_factor_conversion_defecto(unidad_factura, unidad_base)
+        
+        col_eq1, col_eq2 = st.columns([3, 3])
+        factor_conversion = col_eq1.number_input(
+            f"Equivalencia: ¿Cuántas [{unidad_base}] contiene 1 [{unidad_factura}]?", 
+            min_value=0.0001, 
+            value=float(factor_sugerido),
+            format="%.4f"
+        )
+
+        # Cálculos en tiempo real
+        cant_base_calculada = float(cant_factura) * float(factor_conversion)
+        
+        if tipo_precio == "Precio Total del Item ($)":
+            subtotal_item = float(monto_ingresado)
+        else:
+            subtotal_item = float(cant_factura) * float(monto_ingresado)
+
+        costo_unitario_base = (subtotal_item / cant_base_calculada) if cant_base_calculada > 0 else 0.0
+
+        # Vista previa de la conversión
+        st.info(
+            f"📊 **Vista Previa de Ingreso:**\n"
+            f"- **Se sumará al Stock:** `{cant_base_calculada:,.2f} {unidad_base}`\n"
+            f"- **Costo calculado por unidad base:** `${costo_unitario_base:,.4f} / {unidad_base}`\n"
+            f"- **Subtotal de la fila:** `${subtotal_item:,.2f}`"
+        )
+
+        if st.button("➕ Agregar Item al Carrito", use_container_width=True):
+            if subtotal_item <= 0:
+                st.warning("⚠️ El monto asignado debe ser mayor a 0.")
+            else:
+                st.session_state.carrito_compra.append({
+                    "insumo_id": ins_objeto["id"],
+                    "nombre": ins_objeto["nombre"],
+                    "cant_factura": float(cant_factura),
+                    "unidad_factura": unidad_factura,
+                    "cant_base": cant_base_calculada,
+                    "unidad_base": unidad_base,
+                    "costo_unitario_base": costo_unitario_base,
+                    "subtotal": subtotal_item
+                })
+                st.rerun()
+
+        # ---------------------------------------------------------
+        # CARRITO Y CONFIRMACIÓN
+        # ---------------------------------------------------------
         if st.session_state.carrito_compra:
-            st.markdown("### 🛒 Detalle de la Compra")
+            st.markdown("### 🛒 Detalle de la Compra a Registrar")
             df_carrito = pd.DataFrame(st.session_state.carrito_compra)
-            st.dataframe(df_carrito[["nombre", "cantidad", "unidad", "precio_unitario", "subtotal"]], use_container_width=True, hide_index=True)
+            
+            # Formateo visual para la tabla
+            df_carrito["factura_detalle"] = df_carrito.apply(lambda r: f"{r['cant_factura']} {r['unidad_factura']}", axis=1)
+            df_carrito["stock_detalle"] = df_carrito.apply(lambda r: f"{r['cant_base']:,.2f} {r['unidad_base']}", axis=1)
+
+            st.dataframe(
+                df_carrito[["nombre", "factura_detalle", "stock_detalle", "costo_unitario_base", "subtotal"]],
+                column_config={
+                    "nombre": "Insumo",
+                    "factura_detalle": "Factura (Cant / Unidad)",
+                    "stock_detalle": "Ingreso a Stock (Base)",
+                    "costo_unitario_base": st.column_config.NumberColumn("Costo Base Unitario", format="$%.4f"),
+                    "subtotal": st.column_config.NumberColumn("Subtotal", format="$%.2f")
+                },
+                use_container_width=True, 
+                hide_index=True
+            )
 
             total_compra = df_carrito["subtotal"].sum()
             st.markdown(f"### **Total Factura: ${total_compra:,.2f}**")
@@ -226,39 +339,39 @@ def show_modulo_proveedores():
 
             if col_confirm.button("✅ Registrar Factura y Actualizar Stock", type="primary", use_container_width=True):
                 try:
-                    # 1. Registrar Cabecera Factura
                     compra_payload = {
                         "proveedor_id": dict_provs_compra[prov_nombre],
                         "punto_venta": pv,
                         "numero_factura": nro_fac,
                         "fecha_factura": str(fecha_fac),
                         "metodo_pago": metodo_pago,
-                        "monto_total": total_compra
+                        "monto_total": float(total_compra)
                     }
                     compra_res = supabase.table("compras").insert(compra_payload).execute()
                     compra_id = compra_res.data[0]["id"]
 
-                    # 2. Registrar Detalles y Actualizar Stock/Costo en Insumos
                     for item in st.session_state.carrito_compra:
+                        # Registro en el detalle de compras en unidades base
                         detalle_payload = {
                             "compra_id": compra_id,
                             "insumo_id": item["insumo_id"],
-                            "cantidad": item["cantidad"],
-                            "precio_unitario": item["precio_unitario"]
+                            "cantidad": item["cant_base"],
+                            "precio_unitario": item["costo_unitario_base"]
                         }
                         supabase.table("compra_detalles").insert(detalle_payload).execute()
 
-                        # Aumentar stock y actualizar precio de costo del insumo
+                        # Actualización de stock y costo del insumo
                         ins_id = item["insumo_id"]
                         ins_actual = supabase.table("insumos").select("stock_actual").eq("id", ins_id).single().execute().data
-                        nuevo_stock = float(ins_actual["stock_actual"]) + float(item["cantidad"])
+                        stock_previo = float(ins_actual.get("stock_actual", 0.0))
+                        nuevo_stock = stock_previo + float(item["cant_base"])
 
                         supabase.table("insumos").update({
                             "stock_actual": nuevo_stock,
-                            "costo_unidad": item["precio_unitario"] # Actualiza el precio de costo al último precio comprado
+                            "costo_unidad": item["costo_unitario_base"]
                         }).eq("id", ins_id).execute()
 
-                    st.success("🎉 ¡Compra registrada con éxito! El stock y los costos de insumos han sido actualizados.")
+                    st.success("🎉 ¡Compra registrada con éxito! Stock y costos unitarios actualizados.")
                     st.session_state.carrito_compra = []
                     st.rerun()
 
