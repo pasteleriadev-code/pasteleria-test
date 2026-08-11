@@ -312,9 +312,19 @@ def show_modulo_proveedores():
             st.markdown("### 🛒 Detalle de la Compra a Registrar")
             df_carrito = pd.DataFrame(st.session_state.carrito_compra)
             
-            # Formateo visual para la tabla
-            df_carrito["factura_detalle"] = df_carrito.apply(lambda r: f"{r['cant_factura']} {r['unidad_factura']}", axis=1)
-            df_carrito["stock_detalle"] = df_carrito.apply(lambda r: f"{r['cant_base']:,.2f} {r['unidad_base']}", axis=1)
+            # Formateo visual defensivo con .get() por si existen items de la versión anterior
+            df_carrito["factura_detalle"] = df_carrito.apply(
+                lambda r: f"{r.get('cant_factura', r.get('cantidad', 0))} {r.get('unidad_factura', r.get('unidad', ''))}", 
+                axis=1
+            )
+            df_carrito["stock_detalle"] = df_carrito.apply(
+                lambda r: f"{r.get('cant_base', r.get('cantidad', 0)):,.2f} {r.get('unidad_base', r.get('unidad', ''))}", 
+                axis=1
+            )
+
+            # Asegurar la columna de costo base
+            if "costo_unitario_base" not in df_carrito.columns and "precio_unitario" in df_carrito.columns:
+                df_carrito["costo_unitario_base"] = df_carrito["precio_unitario"]
 
             st.dataframe(
                 df_carrito[["nombre", "factura_detalle", "stock_detalle", "costo_unitario_base", "subtotal"]],
@@ -351,12 +361,16 @@ def show_modulo_proveedores():
                     compra_id = compra_res.data[0]["id"]
 
                     for item in st.session_state.carrito_compra:
+                        # Extraer datos con compatibilidad para ambas versiones
+                        cant_a_ingresar = item.get("cant_base", item.get("cantidad", 0))
+                        costo_a_ingresar = item.get("costo_unitario_base", item.get("precio_unitario", 0))
+
                         # Registro en el detalle de compras en unidades base
                         detalle_payload = {
                             "compra_id": compra_id,
                             "insumo_id": item["insumo_id"],
-                            "cantidad": item["cant_base"],
-                            "precio_unitario": item["costo_unitario_base"]
+                            "cantidad": cant_a_ingresar,
+                            "precio_unitario": costo_a_ingresar
                         }
                         supabase.table("compra_detalles").insert(detalle_payload).execute()
 
@@ -364,11 +378,11 @@ def show_modulo_proveedores():
                         ins_id = item["insumo_id"]
                         ins_actual = supabase.table("insumos").select("stock_actual").eq("id", ins_id).single().execute().data
                         stock_previo = float(ins_actual.get("stock_actual", 0.0))
-                        nuevo_stock = stock_previo + float(item["cant_base"])
+                        nuevo_stock = stock_previo + float(cant_a_ingresar)
 
                         supabase.table("insumos").update({
                             "stock_actual": nuevo_stock,
-                            "costo_unidad": item["costo_unitario_base"]
+                            "costo_unidad": costo_a_ingresar
                         }).eq("id", ins_id).execute()
 
                     st.success("🎉 ¡Compra registrada con éxito! Stock y costos unitarios actualizados.")
