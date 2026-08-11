@@ -132,31 +132,34 @@ def show_modulo_pedidos():
     if "carrito_pos" not in st.session_state:
         st.session_state.carrito_pos = []
 
-    # Asignamos una 'key' fija al selectbox
-    prod_sel_key = st.selectbox(
+    # Función callback para procesar la selección y resetear la clave antes del re-render
+    def agregar_producto_al_carrito():
+        prod_sel_key = st.session_state.get("selector_producto_pos")
+        if prod_sel_key and prod_sel_key != "Escriba para buscar producto...":
+            if prod_sel_key in dict_productos:
+                prod_obj = dict_productos[prod_sel_key]
+                
+                # Verificar si ya existe en el carrito
+                existe = next((item for item in st.session_state.carrito_pos if item["id"] == prod_obj["id"]), None)
+                if existe:
+                    existe["cantidad"] += 1
+                else:
+                    st.session_state.carrito_pos.append({
+                        "id": prod_obj["id"],
+                        "nombre": prod_obj["nombre"],
+                        "precio": float(prod_obj["precio_venta"]),
+                        "cantidad": 1
+                    })
+            # Limpiar la selección en el callback (aquí SÍ está permitido)
+            st.session_state["selector_producto_pos"] = "Escriba para buscar producto..."
+
+    # Selectbox con callback on_change
+    st.selectbox(
         "Buscar por nombre en el catálogo",
         options=["Escriba para buscar producto..."] + list(dict_productos.keys()),
-        key="selector_producto_pos"
+        key="selector_producto_pos",
+        on_change=agregar_producto_al_carrito
     )
-
-    if prod_sel_key != "Escriba para buscar producto...":
-        prod_obj = dict_productos[prod_sel_key]
-        
-        # Verificar si ya existe en el carrito
-        existe = next((item for item in st.session_state.carrito_pos if item["id"] == prod_obj["id"]), None)
-        if existe:
-            existe["cantidad"] += 1
-        else:
-            st.session_state.carrito_pos.append({
-                "id": prod_obj["id"],
-                "nombre": prod_obj["nombre"],
-                "precio": float(prod_obj["precio_venta"]),
-                "cantidad": 1
-            })
-            
-        # RESETEAR EL SELECTBOX para romper el bucle infinito:
-        st.session_state["selector_producto_pos"] = "Escriba para buscar producto..."
-        st.rerun()
 
     # ---------------------------------------------------------
     # 3. DETALLE DE LA VENTA / TABLA INTERACTIVA
