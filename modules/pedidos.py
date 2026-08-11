@@ -20,8 +20,8 @@ def show_modulo_pedidos():
     # ---------------------------------------------------------
     with st.expander("📂 VER PEDIDOS / ENCARGOS PENDIENTES", expanded=False):
         try:
-            # Consulta de pedidos pendientes y clientes por separado para evitar fallos de JOIN
-            res_p = supabase.table("pedidos").select("*").neq("estado", "Finalizado").order("fecha_entrega").execute()
+            # Consulta de pedidos pendientes (excluyendo 'Entregado' y opcionalmente 'Cancelado')
+            res_p = supabase.table("pedidos").select("*").neq("estado", "Entregado").order("fecha_entrega").execute()
             res_c_all = supabase.table("clientes").select("id, nombre").execute()
             
             pedidos_list = res_p.data or []
@@ -250,7 +250,7 @@ def show_modulo_pedidos():
                     "fecha_pedido": datetime.now().isoformat(),
                     "fecha_entrega": str(fecha_entrega),
                     "notas_personalizacion": observaciones,
-                    "estado": "Finalizado"
+                    "estado": "Entregado"
                 }
                 res_p = supabase.table("pedidos").insert(payload_p).execute()
                 pedido_id = res_p.data[0]["id"]
