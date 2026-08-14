@@ -80,7 +80,6 @@ def show_modulo_recetas():
 
                     costo_total = costo_ingredientes + costo_packaging
                     rendimiento = r["rendimiento_porciones"] or 1
-                    costo_porcion = costo_total / rendimiento if rendimiento > 0 else 0.0
 
                     with st.expander(
                         f"🎂 {r['nombre']} — Costo Total: ${costo_total:,.2f} | Rendimiento: {rendimiento} porciones"
@@ -115,7 +114,7 @@ def show_modulo_recetas():
             st.error(f"Error al cargar recetas: {e}")
 
     # ---------------------------------------------------------
-    # 2. CREAR NUEVA RECETA (+ SEPARACIÓN DE PACKAGING)
+    # 2. CREAR NUEVA RECETA (+ SELECTBOX FILTRADOS)
     # ---------------------------------------------------------
     with tab_nueva:
         st.subheader("➕ Diseñar Receta")
@@ -127,9 +126,13 @@ def show_modulo_recetas():
             st.warning("⚠️ Debes cargar insumos en el inventario antes de armar recetas.")
             return
 
-        # Separación de diccionarios de insumos
-        insumos_comestibles = {i["nombre"]: i for i in insumos if i.get("rubro") != NOMBRE_RUBRO_PACKAGING}
-        insumos_packaging = {i["nombre"]: i for i in insumos if i.get("rubro") == NOMBRE_RUBRO_PACKAGING}
+        # Diccionarios de insumos filtrados por rubro para alimentar los selectbox
+        insumos_comestibles = {
+            i["nombre"]: i for i in insumos if i.get("rubro") != NOMBRE_RUBRO_PACKAGING
+        }
+        insumos_packaging = {
+            i["nombre"]: i for i in insumos if i.get("rubro") == NOMBRE_RUBRO_PACKAGING
+        }
 
         # Inicialización de borradores
         if "borrador_ingredientes" not in st.session_state:
@@ -145,24 +148,32 @@ def show_modulo_recetas():
         r_desc = st.text_area("Descripción / Preparación", placeholder="Notas del chef...")
 
         st.markdown("---")
-        
+
         # --- BLOQUE 1: INGREDIENTES COMESTIBLES ---
         st.markdown("#### 🥣 1. Ingredientes de la Preparación")
         if insumos_comestibles:
             col_i1, col_i2, col_i3 = st.columns([4, 2, 2])
-            ins_sel_nombre = col_i1.selectbox("Seleccionar Ingrediente Comestible", list(insumos_comestibles.keys()))
+            ins_sel_nombre = col_i1.selectbox(
+                "Seleccionar Ingrediente Comestible",
+                options=list(insumos_comestibles.keys()),
+                key="sb_ingredientes"
+            )
             ins_obj = insumos_comestibles[ins_sel_nombre]
 
             cant_ingrediente = col_i2.number_input(
-                f"Cantidad ({ins_obj['unidad_medida']})", min_value=0.01, step=1.0, format="%.2f", key="cant_ing"
+                f"Cantidad ({ins_obj['unidad_medida']})",
+                min_value=0.01,
+                step=1.0,
+                format="%.2f",
+                key="cant_ing"
             )
-            
+
             if col_i3.button("➕ Añadir Ingrediente", use_container_width=True):
                 costo_u = float(ins_obj["costo_unidad"] or 0)
                 st.session_state.borrador_ingredientes.append({
                     "insumo_id": ins_obj["id"],
                     "nombre": ins_obj["nombre"],
-                    "rubro": ins_obj.get("rubro", "Comestible"),
+                    "rubro": ins_obj.get("rubro", "Sin Rubro"),
                     "cantidad": cant_ingrediente,
                     "unidad": ins_obj["unidad_medida"],
                     "costo_u": costo_u,
@@ -170,7 +181,7 @@ def show_modulo_recetas():
                 })
                 st.rerun()
         else:
-            st.info("No tienes ingredientes comestibles registrados aún.")
+            st.info("No tienes insumos comestibles registrados aún.")
 
         if st.session_state.borrador_ingredientes:
             df_ing = pd.DataFrame(st.session_state.borrador_ingredientes)
@@ -190,13 +201,21 @@ def show_modulo_recetas():
         st.markdown("#### 📦 2. Packaging y Presentación")
         if insumos_packaging:
             col_p1, col_p2, col_p3 = st.columns([4, 2, 2])
-            pkg_sel_nombre = col_p1.selectbox("Seleccionar Elemento de Packaging", list(insumos_packaging.keys()))
+            pkg_sel_nombre = col_p1.selectbox(
+                "Seleccionar Elemento de Packaging",
+                options=list(insumos_packaging.keys()),
+                key="sb_packaging"
+            )
             pkg_obj = insumos_packaging[pkg_sel_nombre]
 
             cant_pkg = col_p2.number_input(
-                f"Cantidad ({pkg_obj['unidad_medida']})", min_value=0.01, step=1.0, format="%.2f", key="cant_pkg"
+                f"Cantidad ({pkg_obj['unidad_medida']})",
+                min_value=0.01,
+                step=1.0,
+                format="%.2f",
+                key="cant_pkg"
             )
-            
+
             if col_p3.button("➕ Añadir Packaging", use_container_width=True):
                 costo_u = float(pkg_obj["costo_unidad"] or 0)
                 st.session_state.borrador_packaging.append({
@@ -231,7 +250,7 @@ def show_modulo_recetas():
             subtotal_ingredientes = sum(item["subtotal"] for item in st.session_state.borrador_ingredientes)
             subtotal_packaging = sum(item["subtotal"] for item in st.session_state.borrador_packaging)
             total_receta = subtotal_ingredientes + subtotal_packaging
-            
+
             precio_sugerido_calculado = calcular_precio_sugerido(total_receta)
 
             st.markdown("---")
@@ -273,7 +292,7 @@ def show_modulo_recetas():
 
                         receta_id = rec_res.data[0]["id"]
 
-                        # B) Guardar Todos los Detalles (Ingredientes + Packaging)
+                        # B) Guardar Todos los Detalles
                         for item in todos_los_items:
                             supabase.table("receta_detalles").insert({
                                 "receta_id": receta_id,
@@ -281,7 +300,7 @@ def show_modulo_recetas():
                                 "cantidad": item["cantidad"]
                             }).execute()
 
-                        # C) Auto-crear producto en el catálogo
+                        # C) Auto-crear producto en catálogo
                         supabase.table("productos").insert({
                             "nombre": r_nombre.strip(),
                             "receta_id": receta_id,
@@ -324,10 +343,9 @@ def show_modulo_recetas():
                 porciones_totales = lotes * (receta_obj["rendimiento_porciones"] or 1)
                 cp2.metric("Unidades/Porciones Producidas", porciones_totales)
 
-                # Comprobar Stock
                 st.markdown("##### 🔍 Verificación de Stock (Ingredientes + Packaging)")
                 detalles = receta_obj.get("receta_detalles", [])
-                
+
                 suficiente = True
                 items_produccion = []
 
@@ -363,12 +381,10 @@ def show_modulo_recetas():
                     st.error("⚠️ No hay suficiente stock de insumos o packaging para producir estas tandas.")
 
                 if st.button("🍳 Confirmar Producción", type="primary", disabled=not suficiente, use_container_width=True):
-                    # A) Descontar Insumos y Packaging
                     for item in items_produccion:
                         nuevo_stock_insumo = item["stock_actual"] - item["requerido"]
                         supabase.table("insumos").update({"stock_actual": nuevo_stock_insumo}).eq("id", item["insumo_id"]).execute()
 
-                    # B) Sumar Stock al Producto Terminado
                     res_p = supabase.table("productos").select("*").eq("receta_id", receta_obj["id"]).execute()
                     prods_asociados = res_p.data or []
 
@@ -376,7 +392,7 @@ def show_modulo_recetas():
                         prod_target = prods_asociados[0]
                         stock_prod_actual = float(prod_target.get("stock_actual") or 0.0)
                         nuevo_stock_prod = stock_prod_actual + porciones_totales
-                        
+
                         supabase.table("productos").update({"stock_actual": nuevo_stock_prod}).eq("id", prod_target["id"]).execute()
                         st.success(f"🎉 ¡Producción registrada! Se descontaron insumos/packaging y se sumaron **+{porciones_totales} unidades** al catálogo.")
                     else:
@@ -397,4 +413,4 @@ def show_modulo_recetas():
             else:
                 st.info("No hay recetas disponibles.")
         except Exception as e:
-            st.error(f"Error en la pantalla de producción: {e}")
+            st.error(f"Error en la pantalla de producción: {e}")vvvvvvvvv
