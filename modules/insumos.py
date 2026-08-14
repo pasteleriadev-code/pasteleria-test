@@ -4,10 +4,22 @@ from utils import get_supabase_client
 
 supabase = get_supabase_client()
 
+# Lista de Rubros / Categorías predefinidas
+RUBROS_INSUMOS = [
+    "Harinas, Féculas y Leudantes",
+    "Lácteos y Refrigerados",
+    "Chocolates y Cacaos",
+    "Endulzantes, Jarabes y Pastas",
+    "Frutas, Pulpas y Semielaborados",
+    "Frutos Secos y Semillas",
+    "Secos, Galletas y Varios",
+    "Empaque y Descartables"
+]
+
 def show_modulo_insumos():
     st.header("📦 Gestión de Insumos y Materias Primas")
 
-    # Tabs para organizar las acciones (se agrega la 3ra pestaña)
+    # Tabs para organizar las acciones
     tab_listado, tab_nuevo, tab_editar = st.tabs([
         "📋 Inventario Actual", 
         "➕ Registrar Nuevo Insumo", 
@@ -25,6 +37,12 @@ def show_modulo_insumos():
             if data:
                 df = pd.DataFrame(data)
 
+                # Si hay registros viejos sin rubro asignado, se completa con 'Sin Rubro'
+                if "rubro" not in df.columns:
+                    df["rubro"] = "Sin Rubro"
+                else:
+                    df["rubro"] = df["rubro"].fillna("Sin Rubro")
+
                 # Mostrar métricas de alerta
                 insumos_bajo_stock = df[df["stock_actual"] <= df["stock_minimo"]]
                 
@@ -34,13 +52,23 @@ def show_modulo_insumos():
 
                 if not insumos_bajo_stock.empty:
                     st.warning("⚠️ Hay materias primas por debajo del stock mínimo:")
-                    st.dataframe(insumos_bajo_stock[["nombre", "stock_actual", "stock_minimo", "unidad_medida"]], use_container_width=True)
+                    st.dataframe(insumos_bajo_stock[["nombre", "rubro", "stock_actual", "stock_minimo", "unidad_medida"]], use_container_width=True)
 
                 st.subheader("Listado General")
+                
+                # Filtro dinámico por Rubro
+                rubro_filtro = st.selectbox("🔍 Filtrar por Rubro / Categoría:", ["Todos"] + RUBROS_INSUMOS + ["Sin Rubro"])
+                
+                if rubro_filtro != "Todos":
+                    df_mostrar = df[df["rubro"] == rubro_filtro]
+                else:
+                    df_mostrar = df
+
                 st.dataframe(
-                    df[["nombre", "unidad_medida", "stock_actual", "stock_minimo", "costo_unidad"]],
+                    df_mostrar[["nombre", "rubro", "unidad_medida", "stock_actual", "stock_minimo", "costo_unidad"]],
                     column_config={
                         "nombre": "Nombre del Insumo",
+                        "rubro": "Categoría / Rubro",
                         "unidad_medida": "Unidad",
                         "stock_actual": st.column_config.NumberColumn("Stock Actual", format="%.2f"),
                         "stock_minimo": st.column_config.NumberColumn("Stock Mínimo", format="%.2f"),
@@ -61,9 +89,10 @@ def show_modulo_insumos():
         with st.form("form_nuevo_insumo", clear_on_submit=True):
             st.subheader("Datos de la Materia Prima")
             
-            col_a, col_b = st.columns(2)
+            col_a, col_b, col_rubro = st.columns(3)
             nombre = col_a.text_input("Nombre del Insumo *", placeholder="Ej. Harina 0000")
-            unidad = col_b.selectbox("Unidad de Medida *", ["gramos", "mililitros", "unidades", "kilos", "litros"])
+            rubro_sel = col_b.selectbox("Categoría / Rubro *", RUBROS_INSUMOS)
+            unidad = col_rubro.selectbox("Unidad de Medida *", ["gramos", "mililitros", "unidades", "kilos", "litros"])
 
             col_c, col_d, col_e = st.columns(3)
             stock_actual = col_c.number_input("Stock Inicial", min_value=0.0, step=100.0, format="%.2f")
@@ -78,6 +107,7 @@ def show_modulo_insumos():
                 else:
                     nuevo_insumo = {
                         "nombre": nombre.strip(),
+                        "rubro": rubro_sel,
                         "unidad_medida": unidad,
                         "stock_actual": stock_actual,
                         "stock_minimo": stock_minimo,
@@ -85,7 +115,7 @@ def show_modulo_insumos():
                     }
                     try:
                         supabase.table("insumos").insert(nuevo_insumo).execute()
-                        st.success(f"¡Insumo '{nombre}' registrado con éxito!")
+                        st.success(f"¡Insumo '{nombre}' guardado con éxito bajo el rubro '{rubro_sel}'!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error al guardar en Supabase: {e}")
@@ -106,11 +136,16 @@ def show_modulo_insumos():
                 insumo_obj = dict_insumos[insumo_sel_key]
 
                 unidades = ["gramos", "mililitros", "unidades", "kilos", "litros"]
-                idx_unidad = unidades.index(insumo_obj["unidad_medida"]) if insumo_obj["unidad_medida"] in unidades else 0
+                idx_unidad = unidades.index(insumo_obj["unidad_medida"]) if insumo_obj.get("unidad_medida") in unidades else 0
+
+                # Calcular índice del rubro para el selectbox
+                rubro_actual = insumo_obj.get("rubro")
+                idx_rubro = RUBROS_INSUMOS.index(rubro_actual) if rubro_actual in RUBROS_INSUMOS else 0
 
                 with st.form("form_editar_insumo"):
-                    col_ea, col_eb = st.columns(2)
+                    col_ea, col_erubro, col_eb = st.columns(3)
                     edit_nombre = col_ea.text_input("Nombre del Insumo", value=insumo_obj["nombre"])
+                    edit_rubro = col_erubro.selectbox("Categoría / Rubro", RUBROS_INSUMOS, index=idx_rubro)
                     edit_unidad = col_eb.selectbox("Unidad de Medida", unidades, index=idx_unidad)
 
                     col_ec, col_ed, col_ee = st.columns(3)
@@ -128,6 +163,7 @@ def show_modulo_insumos():
                         else:
                             payload_update = {
                                 "nombre": edit_nombre.strip(),
+                                "rubro": edit_rubro,
                                 "unidad_medida": edit_unidad,
                                 "stock_actual": edit_stock,
                                 "stock_minimo": edit_stock_min,
