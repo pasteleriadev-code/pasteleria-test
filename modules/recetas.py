@@ -413,4 +413,4 @@ def show_modulo_recetas():
             else:
                 st.info("No hay recetas disponibles.")
         except Exception as e:
-            st.error(f"Error en la pantalla de producción: {e}")vvvvvvvvv
+            st.error(f"Error en la pantalla de producción: {e}")
