@@ -1,21 +1,10 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from utils import get_supabase_client
+# 1. Importamos RUBROS_INSUMOS desde utils
+from utils import get_supabase_client, RUBROS_INSUMOS
 
 supabase = get_supabase_client()
-
-# Lista de Rubros / Categorías exacta del módulo INSUMOS
-RUBROS_INSUMOS = [
-    "Harinas, Féculas y Leudantes",
-    "Lácteos y Refrigerados",
-    "Chocolates y Cacaos",
-    "Endulzantes, Jarabes y Pastas",
-    "Frutas, Pulpas y Semielaborados",
-    "Frutos Secos y Semillas",
-    "Secos, Galletas y Varios",
-    "Empaque y Descartables"
-]
 
 def normalizar_unidad(u: str) -> str:
     """Normaliza el texto de las unidades de medida para comparaciones."""
@@ -115,7 +104,8 @@ def show_modulo_proveedores():
             )
 
             direccion = st.text_input("Dirección")
-            rubros = st.text_input("Asociar Rubros", placeholder="Ej. Lácteos, Harinas, Empaques")
+            # Usamos multiselect basado en RUBROS_INSUMOS
+            rubros_sel = st.multiselect("Asociar Rubros", options=RUBROS_INSUMOS)
 
             submitted = st.form_submit_button("Guardar Proveedor", use_container_width=True)
 
@@ -129,7 +119,7 @@ def show_modulo_proveedores():
                         "telefono": telefono.strip(),
                         "condicion_fiscal": condicion_fiscal,
                         "direccion": direccion.strip(),
-                        "rubros": rubros.strip()
+                        "rubros": ", ".join(rubros_sel)  # Guardamos como string separado por comas
                     }
                     try:
                         supabase.table("proveedores").insert(nuevo_prov).execute()
@@ -167,7 +157,11 @@ def show_modulo_proveedores():
                     edit_cf = col4.selectbox("Condición Fiscal", opciones_cf, index=idx_cf)
 
                     edit_dir = st.text_input("Dirección", value=datos_actuales.get("direccion", ""))
-                    edit_rubros = st.text_input("Rubros", value=datos_actuales.get("rubros", ""))
+                    
+                    # Cargar rubros previamente seleccionados si existen
+                    rubros_previos_str = datos_actuales.get("rubros", "") or ""
+                    rubros_previos_list = [r.strip() for r in rubros_previos_str.split(",") if r.strip() in RUBROS_INSUMOS]
+                    edit_rubros = st.multiselect("Rubros", options=RUBROS_INSUMOS, default=rubros_previos_list)
 
                     if st.form_submit_button("Actualizar Cambios", use_container_width=True):
                         update_data = {
@@ -176,7 +170,7 @@ def show_modulo_proveedores():
                             "telefono": edit_tel.strip(),
                             "condicion_fiscal": edit_cf,
                             "direccion": edit_dir.strip(),
-                            "rubros": edit_rubros.strip()
+                            "rubros": ", ".join(edit_rubros)
                         }
                         supabase.table("proveedores").update(update_data).eq("id", datos_actuales["id"]).execute()
                         st.success("¡Datos actualizados correctamente!")
@@ -264,6 +258,7 @@ def show_modulo_proveedores():
                 st.subheader("🆕 Crear Nuevo Insumo")
                 with st.form("form_rapido_insumo", clear_on_submit=True):
                     quick_nombre = st.text_input("Nombre del Insumo *", placeholder="Ej. Harina 0000")
+                    # Aquí RUBROS_INSUMOS viene directamente del import de utils
                     quick_rubro = st.selectbox("Categoría / Rubro *", RUBROS_INSUMOS)
                     quick_unidad = st.selectbox("Unidad Base *", ["gramos", "mililitros", "unidades", "kilos", "litros"])
                     
@@ -282,7 +277,7 @@ def show_modulo_proveedores():
                                     "nombre": quick_nombre.strip(),
                                     "rubro": quick_rubro,
                                     "unidad_medida": quick_unidad,
-                                    "stock_actual": 0.0,  # Inicia en 0 ya que se le sumará el stock al procesar la compra
+                                    "stock_actual": 0.0,
                                     "stock_minimo": quick_stock_min,
                                     "costo_unidad": quick_costo_init
                                 }
