@@ -5,14 +5,16 @@ from utils import get_supabase_client
 
 supabase = get_supabase_client()
 
-# Lista de rubros para cuando se crea un insumo de forma rápida
+# Lista de Rubros / Categorías exacta del módulo INSUMOS
 RUBROS_INSUMOS = [
-    "Harinas y Secos",
-    "Lácteos y Fríos",
-    "Chocolates y Reposteria",
-    "Frutas y Verduras",
-    "Empaque y Descartables",
-    "Otros"
+    "Harinas, Féculas y Leudantes",
+    "Lácteos y Refrigerados",
+    "Chocolates y Cacaos",
+    "Endulzantes, Jarabes y Pastas",
+    "Frutas, Pulpas y Semielaborados",
+    "Frutos Secos y Semillas",
+    "Secos, Galletas y Varios",
+    "Empaque y Descartables"
 ]
 
 def normalizar_unidad(u: str) -> str:
@@ -261,7 +263,7 @@ def show_modulo_proveedores():
             with st.popover("➕", use_container_width=True, help="Crear nuevo insumo rápido"):
                 st.subheader("🆕 Crear Nuevo Insumo")
                 with st.form("form_rapido_insumo", clear_on_submit=True):
-                    quick_nombre = st.text_input("Nombre del Insumo *", placeholder="Ej. Azúcar Fina")
+                    quick_nombre = st.text_input("Nombre del Insumo *", placeholder="Ej. Harina 0000")
                     quick_rubro = st.selectbox("Categoría / Rubro *", RUBROS_INSUMOS)
                     quick_unidad = st.selectbox("Unidad Base *", ["gramos", "mililitros", "unidades", "kilos", "litros"])
                     
@@ -280,7 +282,7 @@ def show_modulo_proveedores():
                                     "nombre": quick_nombre.strip(),
                                     "rubro": quick_rubro,
                                     "unidad_medida": quick_unidad,
-                                    "stock_actual": 0.0,  # Inicia en 0 ya que se le sumará stock al procesar la compra
+                                    "stock_actual": 0.0,  # Inicia en 0 ya que se le sumará el stock al procesar la compra
                                     "stock_minimo": quick_stock_min,
                                     "costo_unidad": quick_costo_init
                                 }
