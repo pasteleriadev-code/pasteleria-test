@@ -1,20 +1,10 @@
 import streamlit as st
 import pandas as pd
-from utils import get_supabase_client
+from utils import get_supabase_client, RUBROS_INSUMOS  # <--- 1. Importamos RUBROS_INSUMOS
 
 supabase = get_supabase_client()
 
-# Lista de Rubros / Categorías predefinidas
-RUBROS_INSUMOS = [
-    "Harinas, Féculas y Leudantes",
-    "Lácteos y Refrigerados",
-    "Chocolates y Cacaos",
-    "Endulzantes, Jarabes y Pastas",
-    "Frutas, Pulpas y Semielaborados",
-    "Frutos Secos y Semillas",
-    "Secos, Galletas y Varios",
-    "Empaque y Descartables"
-]
+# <--- 2. Se eliminó la definición local de RUBROS_INSUMOS que estaba aquí
 
 def show_modulo_insumos():
     st.header("📦 Gestión de Insumos y Materias Primas")
@@ -56,7 +46,7 @@ def show_modulo_insumos():
 
                 st.subheader("Listado General")
                 
-                # Filtro dinámico por Rubro
+                # Filtro dinámico por Rubro (Usa RUBROS_INSUMOS importado de utils)
                 rubro_filtro = st.selectbox("🔍 Filtrar por Rubro / Categoría:", ["Todos"] + RUBROS_INSUMOS + ["Sin Rubro"])
                 
                 if rubro_filtro != "Todos":
