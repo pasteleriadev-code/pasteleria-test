@@ -114,7 +114,7 @@ def show_modulo_recetas():
             st.error(f"Error al cargar recetas: {e}")
 
     # ---------------------------------------------------------
-    # 2. CREAR NUEVA RECETA (+ SELECTBOX FILTRADOS)
+    # 2. CREAR NUEVA RECETA (+ SELECTBOX FILTRADOS Y BORRADO DE ITEMS)
     # ---------------------------------------------------------
     with tab_nueva:
         st.subheader("➕ Diseñar Receta")
@@ -183,17 +183,32 @@ def show_modulo_recetas():
         else:
             st.info("No tienes insumos comestibles registrados aún.")
 
+        # renderizado dinámico con botón de eliminación por fila
         if st.session_state.borrador_ingredientes:
-            df_ing = pd.DataFrame(st.session_state.borrador_ingredientes)
-            st.dataframe(
-                df_ing[["nombre", "rubro", "cantidad", "unidad", "costo_u", "subtotal"]],
-                column_config={
-                    "costo_u": st.column_config.NumberColumn("Costo U. ($)", format="$%.2f"),
-                    "subtotal": st.column_config.NumberColumn("Subtotal ($)", format="$%.2f")
-                },
-                use_container_width=True,
-                hide_index=True
-            )
+            st.caption("Ingredientes añadidos:")
+            # Encabezados de la tabla interactiva
+            h1, h2, h3, h4, h5, h6 = st.columns([3, 2, 2, 2, 2, 1])
+            h1.markdown("**Ingrediente**")
+            h2.markdown("**Rubro**")
+            h3.markdown("**Cantidad**")
+            h4.markdown("**Costo U.**")
+            h5.markdown("**Subtotal**")
+            h6.markdown("**Quitar**")
+
+            indice_a_eliminar_ing = None
+            for idx, item in enumerate(st.session_state.borrador_ingredientes):
+                f1, f2, f3, f4, f5, f6 = st.columns([3, 2, 2, 2, 2, 1])
+                f1.write(item["nombre"])
+                f2.write(item["rubro"])
+                f3.write(f"{item['cantidad']} {item['unidad']}")
+                f4.write(f"${item['costo_u']:,.2f}")
+                f5.write(f"${item['subtotal']:,.2f}")
+                if f6.button("🗑️", key=f"del_ing_{idx}", help="Eliminar ingrediente"):
+                    indice_a_eliminar_ing = idx
+
+            if indice_a_eliminar_ing is not None:
+                st.session_state.borrador_ingredientes.pop(indice_a_eliminar_ing)
+                st.rerun()
 
         st.markdown("---")
 
@@ -231,17 +246,30 @@ def show_modulo_recetas():
         else:
             st.info("No tienes insumos asignados al rubro 'Empaque y Descartables'.")
 
+        # renderizado dinámico con botón de eliminación por fila
         if st.session_state.borrador_packaging:
-            df_pkg = pd.DataFrame(st.session_state.borrador_packaging)
-            st.dataframe(
-                df_pkg[["nombre", "cantidad", "unidad", "costo_u", "subtotal"]],
-                column_config={
-                    "costo_u": st.column_config.NumberColumn("Costo U. ($)", format="$%.2f"),
-                    "subtotal": st.column_config.NumberColumn("Subtotal ($)", format="$%.2f")
-                },
-                use_container_width=True,
-                hide_index=True
-            )
+            st.caption("Packaging añadido:")
+            # Encabezados de la tabla interactiva
+            hp1, hp2, hp3, hp4, hp5 = st.columns([3, 2, 2, 2, 1])
+            hp1.markdown("**Insumo Packaging**")
+            hp2.markdown("**Cantidad**")
+            hp3.markdown("**Costo U.**")
+            hp4.markdown("**Subtotal**")
+            hp5.markdown("**Quitar**")
+
+            indice_a_eliminar_pkg = None
+            for idx, item in enumerate(st.session_state.borrador_packaging):
+                fp1, fp2, fp3, fp4, fp5 = st.columns([3, 2, 2, 2, 1])
+                fp1.write(item["nombre"])
+                fp2.write(f"{item['cantidad']} {item['unidad']}")
+                fp3.write(f"${item['costo_u']:,.2f}")
+                fp4.write(f"${item['subtotal']:,.2f}")
+                if fp5.button("🗑️", key=f"del_pkg_{idx}", help="Eliminar packaging"):
+                    indice_a_eliminar_pkg = idx
+
+            if indice_a_eliminar_pkg is not None:
+                st.session_state.borrador_packaging.pop(indice_a_eliminar_pkg)
+                st.rerun()
 
         # --- CÁLCULOS Y RESUMEN FINALES ---
         todos_los_items = st.session_state.borrador_ingredientes + st.session_state.borrador_packaging
