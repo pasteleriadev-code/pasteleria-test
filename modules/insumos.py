@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
-from utils import get_supabase_client, RUBROS_INSUMOS  # <--- 1. Importamos RUBROS_INSUMOS
+from utils import get_supabase_client, RUBROS_INSUMOS  # <--- Importación centralizada
 
 supabase = get_supabase_client()
 
-# <--- 2. Se eliminó la definición local de RUBROS_INSUMOS que estaba aquí
 
 def show_modulo_insumos():
     st.header("📦 Gestión de Insumos y Materias Primas")
@@ -27,7 +26,7 @@ def show_modulo_insumos():
             if data:
                 df = pd.DataFrame(data)
 
-                # Si hay registros viejos sin rubro asignado, se completa con 'Sin Rubro'
+                # Completa nulos si existen registros antiguos
                 if "rubro" not in df.columns:
                     df["rubro"] = "Sin Rubro"
                 else:
@@ -46,13 +45,19 @@ def show_modulo_insumos():
 
                 st.subheader("Listado General")
                 
-                # Filtro dinámico por Rubro (Usa RUBROS_INSUMOS importado de utils)
-                rubro_filtro = st.selectbox("🔍 Filtrar por Rubro / Categoría:", ["Todos"] + RUBROS_INSUMOS + ["Sin Rubro"])
+                # --- FILTROS COMBINADOS: TEXTO + RUBRO ---
+                col_f1, col_f2 = st.columns([2, 1])
+                busqueda_texto = col_f1.text_input("🔍 Buscar por nombre de insumo:", placeholder="Ej. Harina, Manteca, Dulce...")
+                rubro_filtro = col_f2.selectbox("📂 Filtrar por Rubro:", ["Todos"] + RUBROS_INSUMOS + ["Sin Rubro"])
                 
+                # Aplicar filtros secuencialmente
+                df_mostrar = df.copy()
+
                 if rubro_filtro != "Todos":
-                    df_mostrar = df[df["rubro"] == rubro_filtro]
-                else:
-                    df_mostrar = df
+                    df_mostrar = df_mostrar[df_mostrar["rubro"] == rubro_filtro]
+
+                if busqueda_texto.strip():
+                    df_mostrar = df_mostrar[df_mostrar["nombre"].str.contains(busqueda_texto.strip(), case=False, na=False)]
 
                 st.dataframe(
                     df_mostrar[["nombre", "rubro", "unidad_medida", "stock_actual", "stock_minimo", "costo_unidad"]],
