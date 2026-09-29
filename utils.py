@@ -31,3 +31,27 @@ def get_supabase_client() -> Client:
     except Exception as e:
         st.error(f"Error al leer las credenciales de Supabase: {e}")
         st.stop()
+
+# ==============================================================================
+# FORMATEADORES NUMÉRICOS (Formato Local AR / ES)
+# ==============================================================================
+def fmt_num(valor: float, decimales: int = 2) -> str:
+    """
+    Formatea un número utilizando punto para miles y coma para decimales.
+    Ejemplo: 1234.56 -> "1.234,56"
+    """
+    if valor is None:
+        return f"0,{'0' * decimales}"
+    try:
+        texto = f"{float(valor):,.{decimales}f}"
+        return texto.replace(",", "X").replace(".", ",").replace("X", ".")
+    except (ValueError, TypeError):
+        return f"0,{'0' * decimales}"
+
+
+def fmt_moneda(valor: float, decimales: int = 2) -> str:
+    """
+    Formatea un monto como moneda utilizando signo $, punto para miles y coma para decimales.
+    Ejemplo: 1234.56 -> "$ 1.234,56"
+    """
+    return f"$ {fmt_num(valor, decimales)}"
