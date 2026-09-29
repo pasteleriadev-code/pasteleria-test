@@ -80,7 +80,7 @@ def show_modulo_insumos():
                 df_mostrar = df_filtrado.copy()
                 df_mostrar["stock_actual"] = df_mostrar["stock_actual"].apply(lambda x: fmt_num(x, 2))
                 df_mostrar["stock_minimo"] = df_mostrar["stock_minimo"].apply(lambda x: fmt_num(x, 2))
-                df_mostrar["costo_unidad"] = df_mostrar["costo_unidad"].apply(lambda x: fmt_moneda(x, 4))
+                df_mostrar["costo_unidad"] = df_mostrar["costo_unidad"].apply(lambda x: fmt_moneda(x, 2))
 
                 st.dataframe(
                     df_mostrar[["nombre", "rubro", "unidad_medida", "stock_actual", "stock_minimo", "costo_unidad"]],
