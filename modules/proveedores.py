@@ -2,17 +2,51 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-# Importamos todo de utils en una sola línea
-from utils import (
-    RUBROS_INSUMOS,
-    fmt_moneda,
-    fmt_num,
-    get_supabase_client,
-    normalizar_unidad,
-    obtener_factor_conversion_defecto,
-)
+# Importamos solo lo que REALMENTE está en utils.py
+from utils import RUBROS_INSUMOS, fmt_moneda, fmt_num, get_supabase_client
 
 supabase = get_supabase_client()
+
+
+def normalizar_unidad(u: str) -> str:
+    """Normaliza el texto de las unidades de medida para comparaciones."""
+    if not u:
+        return ""
+    u_clean = u.lower().strip()
+    if u_clean in ["kg", "kilo", "kilogramo", "kilogramos", "kgs", "kilos"]:
+        return "kg"
+    if u_clean in ["g", "gramo", "gramos", "gr", "grs"]:
+        return "g"
+    if u_clean in ["l", "lt", "litro", "litros", "lts"]:
+        return "l"
+    if u_clean in ["ml", "mililitro", "mililitros", "cc"]:
+        return "ml"
+    if u_clean in ["unid", "unidad", "unidades", "u"]:
+        return "u"
+    return u_clean
+
+
+def obtener_factor_conversion_defecto(u_compra: str, u_base: str) -> float:
+    """Retorna el factor multiplicador por defecto para pasar de unidad de compra a unidad base."""
+    compra_norm = normalizar_unidad(u_compra)
+    base_norm = normalizar_unidad(u_base)
+
+    if compra_norm == base_norm:
+        return 1.0
+
+    # Conversiones de Peso
+    if compra_norm == "kg" and base_norm == "g":
+        return 1000.0
+    if compra_norm == "g" and base_norm == "kg":
+        return 0.001
+
+    # Conversiones de Volumen
+    if compra_norm == "l" and base_norm == "ml":
+        return 1000.0
+    if compra_norm == "ml" and base_norm == "l":
+        return 0.001
+
+    return 1.0
 
 
 def show_modulo_proveedores():
