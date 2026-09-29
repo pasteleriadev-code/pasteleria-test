@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utils import get_supabase_client, RUBROS_INSUMOS  # <--- Importación centralizada
+from utils import get_supabase_client, RUBROS_INSUMOS, fmt_num, fmt_moneda
 
 supabase = get_supabase_client()
 
@@ -41,7 +41,24 @@ def show_modulo_insumos():
 
                 if not insumos_bajo_stock.empty:
                     st.warning("⚠️ Hay materias primas por debajo del stock mínimo:")
-                    st.dataframe(insumos_bajo_stock[["nombre", "rubro", "stock_actual", "stock_minimo", "unidad_medida"]], use_container_width=True)
+                    
+                    # Formateo de tabla de alertas
+                    df_alerta_vista = insumos_bajo_stock.copy()
+                    df_alerta_vista["stock_actual"] = df_alerta_vista["stock_actual"].apply(lambda x: fmt_num(x, 2))
+                    df_alerta_vista["stock_minimo"] = df_alerta_vista["stock_minimo"].apply(lambda x: fmt_num(x, 2))
+                    
+                    st.dataframe(
+                        df_alerta_vista[["nombre", "rubro", "stock_actual", "stock_minimo", "unidad_medida"]],
+                        column_config={
+                            "nombre": "Nombre del Insumo",
+                            "rubro": "Categoría / Rubro",
+                            "stock_actual": "Stock Actual",
+                            "stock_minimo": "Stock Mínimo",
+                            "unidad_medida": "Unidad"
+                        },
+                        use_container_width=True,
+                        hide_index=True
+                    )
 
                 st.subheader("Listado General")
                 
@@ -51,13 +68,19 @@ def show_modulo_insumos():
                 rubro_filtro = col_f2.selectbox("📂 Filtrar por Rubro:", ["Todos"] + RUBROS_INSUMOS + ["Sin Rubro"])
                 
                 # Aplicar filtros secuencialmente
-                df_mostrar = df.copy()
+                df_filtrado = df.copy()
 
                 if rubro_filtro != "Todos":
-                    df_mostrar = df_mostrar[df_mostrar["rubro"] == rubro_filtro]
+                    df_filtrado = df_filtrado[df_filtrado["rubro"] == rubro_filtro]
 
                 if busqueda_texto.strip():
-                    df_mostrar = df_mostrar[df_mostrar["nombre"].str.contains(busqueda_texto.strip(), case=False, na=False)]
+                    df_filtrado = df_filtrado[df_filtrado["nombre"].str.contains(busqueda_texto.strip(), case=False, na=False)]
+
+                # Formatear números a cadenas con punto de miles y coma decimal
+                df_mostrar = df_filtrado.copy()
+                df_mostrar["stock_actual"] = df_mostrar["stock_actual"].apply(lambda x: fmt_num(x, 2))
+                df_mostrar["stock_minimo"] = df_mostrar["stock_minimo"].apply(lambda x: fmt_num(x, 2))
+                df_mostrar["costo_unidad"] = df_mostrar["costo_unidad"].apply(lambda x: fmt_moneda(x, 4))
 
                 st.dataframe(
                     df_mostrar[["nombre", "rubro", "unidad_medida", "stock_actual", "stock_minimo", "costo_unidad"]],
@@ -65,9 +88,9 @@ def show_modulo_insumos():
                         "nombre": "Nombre del Insumo",
                         "rubro": "Categoría / Rubro",
                         "unidad_medida": "Unidad",
-                        "stock_actual": st.column_config.NumberColumn("Stock Actual", format="%.2f"),
-                        "stock_minimo": st.column_config.NumberColumn("Stock Mínimo", format="%.2f"),
-                        "costo_unidad": st.column_config.NumberColumn("Costo / Unidad ($)", format="$%.4f"),
+                        "stock_actual": "Stock Actual",
+                        "stock_minimo": "Stock Mínimo",
+                        "costo_unidad": "Costo / Unidad",
                     },
                     use_container_width=True,
                     hide_index=True
@@ -90,9 +113,9 @@ def show_modulo_insumos():
             unidad = col_rubro.selectbox("Unidad de Medida *", ["gramos", "mililitros", "unidades", "kilos", "litros"])
 
             col_c, col_d, col_e = st.columns(3)
-            stock_actual = col_c.number_input("Stock Inicial", min_value=0.0, step=100.0, format="%.2f")
-            stock_minimo = col_d.number_input("Stock Mínimo Alerta", min_value=0.0, step=100.0, format="%.2f")
-            costo_unidad = col_e.number_input("Costo por Unidad ($)", min_value=0.0, step=0.001, format="%.4f")
+            stock_actual = col_c.number_input("Stock Inicial", min_value=0.0, step=100.0)
+            stock_minimo = col_d.number_input("Stock Mínimo Alerta", min_value=0.0, step=100.0)
+            costo_unidad = col_e.number_input("Costo por Unidad ($)", min_value=0.0, step=0.001)
 
             submitted = st.form_submit_button("Guardar Insumo", use_container_width=True)
 
@@ -144,9 +167,9 @@ def show_modulo_insumos():
                     edit_unidad = col_eb.selectbox("Unidad de Medida", unidades, index=idx_unidad)
 
                     col_ec, col_ed, col_ee = st.columns(3)
-                    edit_stock = col_ec.number_input("Stock Actual", min_value=0.0, value=float(insumo_obj["stock_actual"]), step=100.0, format="%.2f")
-                    edit_stock_min = col_ed.number_input("Stock Mínimo Alerta", min_value=0.0, value=float(insumo_obj["stock_minimo"]), step=100.0, format="%.2f")
-                    edit_costo = col_ee.number_input("Costo por Unidad ($)", min_value=0.0, value=float(insumo_obj["costo_unidad"]), step=0.001, format="%.4f")
+                    edit_stock = col_ec.number_input("Stock Actual", min_value=0.0, value=float(insumo_obj["stock_actual"]), step=100.0)
+                    edit_stock_min = col_ed.number_input("Stock Mínimo Alerta", min_value=0.0, value=float(insumo_obj["stock_minimo"]), step=100.0)
+                    edit_costo = col_ee.number_input("Costo por Unidad ($)", min_value=0.0, value=float(insumo_obj["costo_unidad"]), step=0.001)
 
                     col_b1, col_b2 = st.columns(2)
                     btn_actualizar = col_b1.form_submit_button("💾 Actualizar Insumo", use_container_width=True)
