@@ -128,8 +128,9 @@ def show_modulo_insumos():
             else:
                 df["rubro"] = df["rubro"].fillna("Sin Rubro")
 
+            # Filtramos solo aquellos que tienen un stock mínimo configurado (> 0) y están en alerta
             insumos_bajo_stock = df[
-                df["stock_actual"] <= df["stock_minimo"]
+                (df["stock_minimo"] > 0) & (df["stock_actual"] <= df["stock_minimo"])
             ].copy()
 
             if not insumos_bajo_stock.empty:
@@ -172,8 +173,7 @@ def show_modulo_insumos():
                 lineas_pedido = ["🛒 *PEDIDO DE INSUMOS / REPOSICIÓN*\n"]
                 for _, row in insumos_bajo_stock.iterrows():
                     faltante = float(row["stock_minimo"]) - float(row["stock_actual"])
-                    # Si el faltante es mayor a 0 lo sugerimos, de lo contrario sugerimos reponer la unidad
-                    cant_sugerida = faltante if faltante > 0 else 1.0
+                    cant_sugerida = max(faltante, 1.0)
                     cant_fmt = fmt_num(cant_sugerida, 2)
                     lineas_pedido.append(
                         f"• *{row['nombre']}*: Reponer aprox. *{cant_fmt} {row['unidad_medida']}* (Stock actual: {fmt_num(row['stock_actual'], 2)})"
@@ -181,7 +181,6 @@ def show_modulo_insumos():
 
                 mensaje_wa = "\n".join(lineas_pedido)
 
-                # Mostrar en un text_area fácil de copiar
                 st.text_area(
                     "Mensaje listo para copiar y enviar:",
                     value=mensaje_wa,
