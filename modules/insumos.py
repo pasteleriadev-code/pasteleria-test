@@ -130,7 +130,7 @@ def show_modulo_insumos():
 
             insumos_bajo_stock = df[
                 df["stock_actual"] <= df["stock_minimo"]
-            ]
+            ].copy()
 
             if not insumos_bajo_stock.empty:
                 st.warning(
@@ -164,6 +164,31 @@ def show_modulo_insumos():
                     use_container_width=True,
                     hide_index=True,
                 )
+
+                st.markdown("---")
+                st.subheader("📱 Pedido de Insumos para WhatsApp")
+
+                # Generación del mensaje formateado para WhatsApp
+                lineas_pedido = ["🛒 *PEDIDO DE INSUMOS / REPOSICIÓN*\n"]
+                for _, row in insumos_bajo_stock.iterrows():
+                    faltante = float(row["stock_minimo"]) - float(row["stock_actual"])
+                    # Si el faltante es mayor a 0 lo sugerimos, de lo contrario sugerimos reponer la unidad
+                    cant_sugerida = faltante if faltante > 0 else 1.0
+                    cant_fmt = fmt_num(cant_sugerida, 2)
+                    lineas_pedido.append(
+                        f"• *{row['nombre']}*: Reponer aprox. *{cant_fmt} {row['unidad_medida']}* (Stock actual: {fmt_num(row['stock_actual'], 2)})"
+                    )
+
+                mensaje_wa = "\n".join(lineas_pedido)
+
+                # Mostrar en un text_area fácil de copiar
+                st.text_area(
+                    "Mensaje listo para copiar y enviar:",
+                    value=mensaje_wa,
+                    height=200,
+                    help="Copia este texto y pégalo directamente en WhatsApp."
+                )
+
             else:
                 st.success(
                     "🎉 ¡Todo en orden! No hay insumos en alerta de stock"
